@@ -37,8 +37,19 @@ If you use volta: `volta install node@20`.
 4. **Also run** [`backend/db/migrations/002_dsa_submissions_columns.sql`](backend/db/migrations/002_dsa_submissions_columns.sql)
    — adds `status`, `memory_mb`, `test_cases_passed` to `dsa_submissions` (needed for
    DSA submissions + the DSA Performance tab). Older "basic" DBs are missing these.
+5. **Also run** [`backend/db/migrations/003_proctoring.sql`](backend/db/migrations/003_proctoring.sql)
+   — adds the `proctoring_violations` table and integrity columns
+   (`integrity_score`, `violation_count`, `terminated`, `proctoring_summary`) to
+   `mock_oa_attempts` (needed to persist Mock OA proctoring results). Submissions still
+   work without it, but violations won't be saved until this is applied.
 
-Both scripts are idempotent (`IF NOT EXISTS`), so re-running is safe.
+6. **Also run** [`backend/db/migrations/004_job_docs.sql`](backend/db/migrations/004_job_docs.sql)
+   — adds `jd_doc_url` and `eval_doc_url` columns to `job_postings` so recruiters can
+   attach a Job Description PDF and an Evaluation Details PDF when posting a job. Job posting
+   still works without it (the URLs are silently skipped), but the documents won't be saved
+   or shown to officers/students until this is applied.
+
+All scripts are idempotent (`IF NOT EXISTS`), so re-running is safe.
 
 ---
 
