@@ -5,3 +5,8 @@
 # Local secrets doc (never commit)
 ENV_VALUES.local.md
 *.local.md
+
+# Research paper manuscripts (do not commit to code repo)
+*.tex
+SmartHire_IEEE_Research_Paper.tex
+
