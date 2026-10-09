@@ -42,6 +42,52 @@ const STARTER_BOILERPLATES = {
   javascript: `// Write your JavaScript (Node.js) solution here\nconst fs = require('fs');\n\nfunction solve() {\n    console.log("Program executed successfully");\n}\n\nsolve();\n`,
 };
 
+// ── Boilerplate & Empty Code Detector ───────────────────────────────────────
+function isBoilerplateOrEmpty(code, lang, starterCode) {
+  if (!code || typeof code !== 'string') return true;
+  const trimmed = code.trim();
+  if (trimmed.length === 0) return true;
+
+  const normalize = (s) => (s || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
+  const normCode = normalize(code);
+
+  if (starterCode && normCode === normalize(starterCode)) return true;
+
+  for (const b of Object.values(STARTER_BOILERPLATES)) {
+    if (normCode === normalize(b)) return true;
+  }
+
+  // Strip comments, imports, template prints, and wrapper syntax
+  let stripped = code
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/#[^\n]*/g, '')
+    .replace(/["']Program executed successfully["']/gi, '')
+    .replace(/import\s+[^\n;]+;?/gi, '')
+    .replace(/from\s+\w+\s+import\s+[^\n;]+;?/gi, '')
+    .replace(/#include\s+<[^>]+>/gi, '')
+    .replace(/using\s+namespace\s+\w+;?/gi, '')
+    .replace(/const\s+\w+\s*=\s*require\([^)]+\);?/gi, '')
+    .replace(/ios_base::sync_with_stdio\(false\);?/gi, '')
+    .replace(/cin\.tie\(NULL\);?/gi, '')
+    .replace(/if\s*__name__\s*==\s*['"]__main__['"]\s*:/gi, '')
+    .replace(/public\s+class\s+\w+\s*\{?/gi, '')
+    .replace(/public\s+static\s+void\s+main\s*\([^)]*\)\s*\{?/gi, '')
+    .replace(/def\s+solve\s*\([^)]*\)\s*:\s*(pass)?/gi, '')
+    .replace(/void\s+solve\s*\([^)]*\)\s*\{?\s*\}?/gi, '')
+    .replace(/function\s+solve\s*\([^)]*\)\s*\{?\s*\}?/gi, '')
+    .replace(/return\s+0;?/gi, '')
+    .replace(/solve\(\);?/gi, '')
+    .replace(/[{}();:\s]/g, '');
+
+  if (stripped.length < 12) {
+    return true;
+  }
+
+  return false;
+}
+
+
 // ── Format Question Description to Rich HTML ─────────────────────────────
 function formatMarkdown(md) {
   if (!md) return '';
@@ -179,41 +225,70 @@ function formatMarkdown(md) {
 
 
 // ── Score calculator ───────────────────────────────────────────────────────
-function calcScore(test, answers, questions) {
+function calcScore(test, answers, questions, runOutputs = {}, codeLangs = {}) {
   let earned = 0, totalMCQ = 0, correct = 0, wrong = 0, skipped = 0;
   const breakdown = {};
+  const scoredAnswers = {};
+
   (questions || []).forEach(q => {
-    const section = q.section;
+    const section = q.section || 'General';
     if (!breakdown[section]) breakdown[section] = { correct:0, wrong:0, total:0, marks:0, earned:0 };
     breakdown[section].total++;
     const correctIdx = q.correct_index !== undefined ? q.correct_index
                      : q.correct_answer !== undefined ? q.correct_answer
                      : q.ans;
-    if (q.type === 'mcq') {
+    const isMcq = q.type === 'mcq';
+
+    if (isMcq) {
       totalMCQ++;
       const ans = answers[q.id];
       breakdown[section].marks += q.marks;
       if (ans === undefined || ans === null || ans === '') {
         skipped++;
+        scoredAnswers[q.id] = { answer: null, result: 'skipped', points: 0, correct: correctIdx, explanation: q.explanation };
       } else if (parseInt(ans) === correctIdx) {
         earned += q.marks; correct++;
         breakdown[section].correct++; breakdown[section].earned += q.marks;
+        scoredAnswers[q.id] = { answer: parseInt(ans), result: 'correct', points: q.marks, correct: correctIdx, explanation: q.explanation };
       } else {
-        const neg = Math.floor(q.marks / 4);
+        const neg = Math.max(1, Math.floor(q.marks / 4));
         earned = Math.max(0, earned - neg); wrong++;
         breakdown[section].wrong++;
+        scoredAnswers[q.id] = { answer: parseInt(ans), result: 'wrong', points: -neg, correct: correctIdx, explanation: q.explanation };
       }
-    } else if (q.type !== 'mcq') {
-      const resp = answers[q.id] || '';
-      const wordCount = resp.trim().split(/\s+/).filter(Boolean).length;
-      const pts = Math.round(q.marks * Math.min(wordCount / 100, 1) * 0.7);
-      earned += pts; breakdown[section].earned += pts; breakdown[section].marks += q.marks;
+    } else {
+      const code = answers[q.id] || '';
+      const lang = codeLangs[q.id] || 'python3';
+      const run = runOutputs[q.id];
+      breakdown[section].marks += q.marks;
+
+      if (isBoilerplateOrEmpty(code, lang, q.starterCode)) {
+        skipped++;
+        scoredAnswers[q.id] = { answer: code, result: 'skipped', points: 0, verdict: 'Unattempted', explanation: q.explanation };
+      } else if (run?.verdict === 'Accepted') {
+        earned += q.marks; correct++;
+        breakdown[section].correct++; breakdown[section].earned += q.marks;
+        scoredAnswers[q.id] = { answer: code, result: 'correct', points: q.marks, verdict: 'Accepted', explanation: q.explanation };
+      } else if (run?.verdict === 'Runtime Error' || run?.verdict === 'Compilation Error' || run?.verdict === 'Execution Failed') {
+        const partial = Math.max(1, Math.round(q.marks * 0.3));
+        earned += partial; wrong++;
+        breakdown[section].earned += partial;
+        scoredAnswers[q.id] = { answer: code, result: 'partial', points: partial, verdict: run.verdict, explanation: q.explanation };
+      } else {
+        const hasLogic = /(for|while|if|switch|function|def|class|return|int|vector|let|const)\b/i.test(code);
+        const partial = hasLogic ? Math.max(1, Math.round(q.marks * 0.6)) : Math.max(1, Math.round(q.marks * 0.2));
+        earned += partial;
+        if (hasLogic) correct++; else wrong++;
+        breakdown[section].earned += partial;
+        scoredAnswers[q.id] = { answer: code, result: hasLogic ? 'answered' : 'partial', points: partial, verdict: 'Code Written', explanation: q.explanation };
+      }
     }
   });
+
   const totalMarks = test.total_marks || test.totalMarks || 100;
   const pct   = Math.min(100, Math.round((earned / totalMarks) * 100));
   const grade = pct>=90?'A+':pct>=80?'A':pct>=70?'B+':pct>=60?'B':pct>=50?'C':pct>=40?'D':'F';
-  return { earned, total: totalMarks, pct, grade, correct, wrong, skipped, totalMCQ, breakdown, questions };
+  return { earned, total: totalMarks, pct, grade, correct, wrong, skipped, totalMCQ, breakdown, questions, scoredAnswers };
 }
 
 // ── Pill filter button ─────────────────────────────────────────────────────
@@ -300,7 +375,7 @@ export default function MockOA() {
   const startRef = useRef(null);
 
   // ── Code execution & submission helpers ─────────────────────────────────
-  const getLang = (qId) => codeLangs[qId] || 'python3';
+  const getLang = useCallback((qId) => codeLangs[qId] || 'python3', [codeLangs]);
 
   const handleLangChange = (qId, newLang) => {
     setCodeLangs(prev => ({ ...prev, [qId]: newLang }));
@@ -398,8 +473,8 @@ export default function MockOA() {
         ? answers[currentQ.id]
         : (currentQ.starterCode || STARTER_BOILERPLATES[currentLang] || '');
 
-      if (!currentCode.trim()) {
-        toast('Please write code or solution before submitting (or click Next to skip)', { icon: 'ℹ️' });
+      if (isBoilerplateOrEmpty(currentCode, currentLang, currentQ.starterCode)) {
+        toast.error('You have not written any code yet. Please implement your solution before submitting, or click Next to skip.', { duration: 3200 });
         return;
       }
 
@@ -560,10 +635,23 @@ export default function MockOA() {
 
     try {
       const answerMap = {};
-      Object.entries(answers).forEach(([qid, val]) => { answerMap[qid] = val; });
+      Object.entries(answers).forEach(([qid, val]) => {
+        const qObj = questions.find(x => x.id === qid);
+        const lang = getLang(qid);
+        if (qObj && qObj.type !== 'mcq') {
+          if (!val || isBoilerplateOrEmpty(val, lang, qObj.starterCode)) {
+            // Do not submit unmodified starter boilerplate
+            return;
+          }
+        }
+        answerMap[qid] = val;
+      });
+
       const r = await api.post('/api/mockoa/submit', {
         testId: test.id,
         answers: answerMap,
+        codeRuns: runOutputs,
+        codeLangs,
         startedAt: new Date(startRef.current).toISOString(),
         proctoring,
       });
@@ -579,8 +667,11 @@ export default function MockOA() {
         if (scored?.result === 'correct' || scored?.result === 'answered') {
           breakdown[sec].correct++;
           breakdown[sec].earned += scored.points || 0;
+        } else if (scored?.result === 'partial') {
+          breakdown[sec].earned += scored.points || 0;
+        } else if (scored?.result === 'wrong') {
+          breakdown[sec].wrong++;
         }
-        if (scored?.result === 'wrong') { breakdown[sec].wrong++; }
       });
       setResult({
         earned: d.score, total: d.totalPossible, pct: d.percentage,
@@ -597,14 +688,14 @@ export default function MockOA() {
       });
     } catch (err) {
       // Fallback to local scoring
-      const res = calcScore(test, answers, questions);
+      const res = calcScore(test, answers, questions, runOutputs, codeLangs);
       setResult({ ...res, timeTaken: Math.round((Date.now() - startRef.current) / 1000), autoSubmitted: auto,
         integrityScore, violationCount: violations.length, terminated, violationSummary });
     }
 
     setScreen('result');
     setSubmitting(false);
-  }, [test, answers, submitting, questions]);
+  }, [test, answers, submitting, questions, runOutputs, codeLangs, getLang]);
 
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const tc  = timeLeft < 120 ? C.red : timeLeft < 300 ? C.amber : C.cyan;
@@ -752,7 +843,14 @@ export default function MockOA() {
   // ═══════════════════════════════════════════════════════════════════════
   if (screen === 'test') {
     const sections = [...new Set(questions.map(q => q.section))];
-    const answered = questions.filter(pq => submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0)).length;
+    const isQuestionAnswered = (pq) => {
+      const a = answers[pq.id];
+      if (pq.type === 'mcq') {
+        return a !== undefined && a !== null && a !== '';
+      }
+      return !!a && !isBoilerplateOrEmpty(a, getLang(pq.id), pq.starterCode);
+    };
+    const answered = questions.filter(isQuestionAnswered).length;
     const isCompanyTest = test?.source === 'company';
 
     return (
@@ -887,7 +985,7 @@ export default function MockOA() {
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {sqs.map(pq => {
                           const globalIdx = questions.findIndex(x => x.id === pq.id);
-                          const isAns = submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0);
+                          const isAns = isQuestionAnswered(pq);
                           const isFl  = flagged.has(pq.id);
                           const isCur = globalIdx === current;
                           const bgc   = isCur ? C.cyan : isFl ? C.amber : isAns ? C.green : 'var(--bg-card-high)';
@@ -1766,10 +1864,15 @@ export default function MockOA() {
             const isText = q.type !== 'mcq';
             const correctIdx = q.correct_index !== undefined ? q.correct_index : q.correct_answer !== undefined ? q.correct_answer : q.ans;
             const scored = result.scoredAnswers?.[q.id];
-            const isCorrect = isText ? !!(userAns && userAns.trim().length > 10) : parseInt(userAns) === correctIdx;
-            const isSkipped = isText ? !(userAns && userAns.trim().length > 0) : (userAns === undefined || userAns === null || userAns === '');
-            const statusColor = isSkipped ? C.gray : isCorrect ? C.green : C.red;
-            const statusIcon  = isSkipped ? '—' : isCorrect ? '✓' : '✗';
+            const isSkipped = scored
+              ? scored.result === 'skipped'
+              : (isText ? isBoilerplateOrEmpty(userAns, getLang(q.id), q.starterCode) : (userAns === undefined || userAns === null || userAns === ''));
+            const isCorrect = scored
+              ? (scored.result === 'correct' || scored.result === 'answered')
+              : (isText ? (!isSkipped && !!userAns) : parseInt(userAns) === correctIdx);
+            const isPartial = scored ? (scored.result === 'partial') : false;
+            const statusColor = isSkipped ? C.gray : isCorrect ? C.green : isPartial ? C.amber : C.red;
+            const statusIcon  = isSkipped ? '—' : isCorrect ? '✓' : isPartial ? '½' : '✗';
             const explanation = scored?.explanation || q.explanation;
 
             return (
@@ -1786,9 +1889,14 @@ export default function MockOA() {
 
                     {isText ? (
                       <div style={{ marginBottom:10 }}>
-                        <span style={{ fontSize:12, color:C.gray }}>Your Submitted Code / Response:</span>
-                        <pre style={{ margin:'6px 0', padding:10, background:'var(--bg-card-high)', borderRadius:8, fontSize:12, color:userAns ? C.white : C.gray, overflowX:'auto', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace" }}>
-                          {userAns || '(No response submitted)'}
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                          <span style={{ fontSize:12, color:C.gray }}>Your Submitted Code:</span>
+                          <span style={{ fontSize:11, fontWeight:700, color:statusColor }}>
+                            {scored?.verdict || (isSkipped ? 'Unattempted' : isCorrect ? 'Accepted' : isPartial ? 'Partial Credit' : 'Attempted')} · {scored?.points ?? (isCorrect ? q.marks : 0)}/{q.marks} marks
+                          </span>
+                        </div>
+                        <pre style={{ margin:'6px 0', padding:10, background:'var(--bg-card-high)', borderRadius:8, fontSize:12, color:!isSkipped && userAns ? C.white : C.gray, overflowX:'auto', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace" }}>
+                          {isSkipped ? '(No code submitted — question skipped or starter template unchanged)' : (userAns || '(No response submitted)')}
                         </pre>
                       </div>
                     ) : (
