@@ -37,10 +37,109 @@ const CODE_LANGUAGES = [
 
 const STARTER_BOILERPLATES = {
   python3: `# Write your Python 3 solution here\nimport sys\n\ndef solve():\n    # Read from standard input if required\n    # lines = sys.stdin.read().splitlines()\n    print("Program executed successfully")\n\nif __name__ == '__main__':\n    solve()\n`,
-  cpp: `// Write your C++ 17 solution here\n#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\nint main() {\n    // Read input from cin if required\n    cout << "Program executed successfully" << endl;\n    return 0;\n}\n`,
+  cpp: `// Write your C++ 17 solution here\n#include <iostream>\n#include <vector>\n#include <string>\n#include <algorithm>\n\nusing namespace std;\n\nvoid solve() {\n    // Write your solution logic here\n    cout << "Program executed successfully" << endl;\n}\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n    solve();\n    return 0;\n}\n`,
   java: `// Write your Java solution here\nimport java.util.*;\n\npublic class Solution {\n    public static void main(String[] args) {\n        // Read input using Scanner if required\n        System.out.println("Program executed successfully");\n    }\n}\n`,
   javascript: `// Write your JavaScript (Node.js) solution here\nconst fs = require('fs');\n\nfunction solve() {\n    console.log("Program executed successfully");\n}\n\nsolve();\n`,
 };
+
+// ── Format Question Description to Rich HTML ─────────────────────────────
+function formatMarkdown(md) {
+  if (!md) return '';
+  let out = String(md)
+    // LaTeX math symbols
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\neq/g, '≠')
+    .replace(/\\times/g, '×')
+    .replace(/\\cdot/g, '·')
+    .replace(/\\dots/g, '...')
+    .replace(/\$10\^(\d+)\$/g, '10^$1')
+    .replace(/\$([^$\n]+)\$/g, '$1')
+    // Markdown images
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />')
+    // Ensure existing <img> tags are responsive
+    .replace(/<img\s+([^>]*?)>/gi, (m, attrs) => {
+      return `<img ${attrs} style="max-width:100%;border-radius:8px;margin:8px 0;" />`;
+    })
+    // Headings
+    .replace(/^####\s+(.*$)/gim, '<h5 style="margin:14px 0 6px;font-size:14px;color:#f8fafc;font-weight:700;">$1</h5>')
+    .replace(/^###\s+(.*$)/gim, '<h4 style="margin:16px 0 8px;font-size:15px;color:#f8fafc;font-weight:700;">$1</h4>')
+    .replace(/^##\s+(.*$)/gim, '<h3 style="margin:18px 0 10px;font-size:16px;color:#f8fafc;font-weight:800;">$1</h3>')
+    // Bold & Italics
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong style="color:#ffffff;font-weight:800;"><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#ffffff;font-weight:700;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em style="color:#e2e8f0;">$1</em>')
+    // Inline code
+    .replace(/`([^`\n]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:5px;color:#38bdf8;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12.5px;">$1</code>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;">$1</a>')
+    // Blockquotes
+    .replace(/^>\s+(.*$)/gim, '<blockquote style="border-left:3px solid #6366f1;padding:8px 14px;margin:10px 0;background:rgba(99,102,241,0.08);border-radius:0 8px 8px 0;color:#cbd5e1;font-size:13px;">$1</blockquote>');
+
+  // Handle tables
+  const lines = out.split('\n');
+  const processed = [];
+  let inTable = false;
+  let tableRows = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('|') && line.endsWith('|')) {
+      if (line.includes('---')) continue; // separator row
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      tableRows.push(cells);
+      inTable = true;
+    } else {
+      if (inTable && tableRows.length > 0) {
+        let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #334155;">';
+        tableRows.forEach((row, rIdx) => {
+          tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(255,255,255,0.05)' : 'transparent'};border-bottom:1px solid #334155;">`;
+          row.forEach(cell => {
+            const tag = rIdx === 0 ? 'th' : 'td';
+            tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid #334155;color:${rIdx === 0 ? '#f8fafc' : '#cbd5e1'};font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
+          });
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</table></div>';
+        processed.push(tableHtml);
+        tableRows = [];
+        inTable = false;
+      }
+      processed.push(line);
+    }
+  }
+
+  if (inTable && tableRows.length > 0) {
+    let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #334155;">';
+    tableRows.forEach((row, rIdx) => {
+      tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(255,255,255,0.05)' : 'transparent'};border-bottom:1px solid #334155;">`;
+      row.forEach(cell => {
+        const tag = rIdx === 0 ? 'th' : 'td';
+        tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid #334155;color:${rIdx === 0 ? '#f8fafc' : '#cbd5e1'};font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</table></div>';
+    processed.push(tableHtml);
+  }
+
+  out = processed.join('\n');
+
+  // Convert list items
+  out = out.replace(/^[•\-*]\s+(.*$)/gim, '<div style="display:flex;gap:8px;margin-bottom:6px;"><span style="color:#6366f1;font-weight:700;">•</span><div style="flex:1;">$1</div></div>');
+
+  // Convert double newlines to paragraph spacing
+  out = out.split('\n\n').map(p => {
+    const trimmed = p.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<div') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<table')) {
+      return trimmed;
+    }
+    return `<p style="margin:0 0 10px;line-height:1.7;color:#cbd5e1;">${trimmed.replace(/\n/g, '<br/>')}</p>`;
+  }).join('');
+
+  return out;
+}
 
 
 // ── Score calculator ───────────────────────────────────────────────────────
@@ -667,323 +766,498 @@ export default function MockOA() {
             </div>
           </div>
 
-          {/* Question area */}
-          <div style={{ flex:1, overflowY:'auto', padding:32 }}>
+          {/* Main Assessment Split Workspace (Question on Left, Coding/Options on Right) */}
+          <div style={{ flex:1, display:'flex', minWidth:0, overflow:'hidden' }}>
             {q && (
-              <div style={{ maxWidth:920, margin:'0 auto' }}>
-
-                {/* Q header */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                    <span style={{ background:'var(--bg-card-high)', borderRadius:8, padding:'4px 12px', fontSize:12, fontWeight:700, color:C.white }}>Q {current+1} of {questions.length}</span>
-                    <span style={{ background:`${TYPE_COLOR[test.type]||C.violet}18`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700, color:TYPE_COLOR[test.type]||C.violet, textTransform:'capitalize' }}>
-                      {q.type === 'mcq' ? 'MCQ' : 'Coding / Technical'}
-                    </span>
-                    <span style={{ fontSize:11, color:C.gray }}>{q.section}</span>
-                    <span style={{ fontSize:11, color:C.amber, fontWeight:700 }}>[{q.marks} marks]</span>
-                    {isCompanyTest && <CompanyTag />}
+              <>
+                {/* ── LEFT PANE: Question Description & Details ──────────── */}
+                <div style={{
+                  width: q.type === 'mcq' ? '50%' : '48%',
+                  minWidth: 320,
+                  borderRight: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: 'var(--bg-card)',
+                  overflow: 'hidden'
+                }}>
+                  {/* Q header */}
+                  <div style={{
+                    display:'flex',
+                    justifyContent:'space-between',
+                    alignItems:'center',
+                    padding:'12px 20px',
+                    borderBottom:'1px solid var(--border)',
+                    background:'var(--bg-input)',
+                    flexShrink:0
+                  }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                      <span style={{ background:'var(--bg-card-high)', borderRadius:8, padding:'4px 12px', fontSize:12, fontWeight:700, color:C.white }}>
+                        Q {current+1} of {questions.length}
+                      </span>
+                      <span style={{ background:`${TYPE_COLOR[test.type]||C.violet}18`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700, color:TYPE_COLOR[test.type]||C.violet, textTransform:'capitalize' }}>
+                        {q.type === 'mcq' ? 'MCQ' : 'Coding & Technical'}
+                      </span>
+                      <span style={{ fontSize:11, color:C.gray }}>{q.section}</span>
+                      <span style={{ fontSize:11, color:C.amber, fontWeight:700 }}>[{q.marks} marks]</span>
+                      {isCompanyTest && <CompanyTag />}
+                    </div>
+                    <button
+                      onClick={() => setFlagged(f => { const n = new Set(f); n.has(q.id)?n.delete(q.id):n.add(q.id); return n; })}
+                      style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 11px', background:flagged.has(q.id)?`${C.amber}18`:'transparent', border:`1px solid ${flagged.has(q.id)?C.amber:'var(--border)'}`, borderRadius:8, color:flagged.has(q.id)?C.amber:C.gray, fontSize:12, cursor:'pointer' }}
+                    >
+                      <Flag size={12}/>{flagged.has(q.id)?'Flagged':'Flag'}
+                    </button>
                   </div>
-                  <button onClick={() => setFlagged(f => { const n = new Set(f); n.has(q.id)?n.delete(q.id):n.add(q.id); return n; })}
-                    style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:flagged.has(q.id)?`${C.amber}18`:'transparent', border:`1px solid ${flagged.has(q.id)?C.amber:'var(--border)'}`, borderRadius:8, color:flagged.has(q.id)?C.amber:C.gray, fontSize:12, cursor:'pointer' }}>
-                    <Flag size={12}/>{flagged.has(q.id)?'Flagged':'Flag'}
-                  </button>
-                </div>
 
-                {/* Question title & description */}
-                <div style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:14, padding:24, marginBottom:20 }}>
-                  <h3 style={{ margin:'0 0 14px', fontSize:17, fontWeight:800, color:C.white, fontFamily:"'Sora',sans-serif" }}>{q.text}</h3>
-                  {q.description && (
-                    <div style={{ fontSize:14, color:'var(--text-secondary)', lineHeight:1.75, whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", background:'var(--bg-card)', padding:18, borderRadius:10, border:'1px solid var(--border)', maxHeight:420, overflowY:'auto' }}>
-                      {q.description}
-                    </div>
-                  )}
-                  {q.examples && (
-                    <div style={{ marginTop:14, padding:14, background:'var(--bg-card)', borderRadius:8, border:'1px solid var(--border)' }}>
-                      <p style={{ margin:'0 0 6px', fontSize:11, fontWeight:700, color:C.gray, textTransform:'uppercase' }}>Sample Input & Output:</p>
-                      <pre style={{ margin:0, fontSize:12, color:C.white, whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace" }}>{q.examples}</pre>
-                    </div>
-                  )}
-                  {q.constraints && (
-                    <div style={{ marginTop:10, padding:'8px 12px', background:'var(--bg-card)', borderRadius:6, border:'1px solid var(--border)' }}>
-                      <p style={{ margin:0, fontSize:11, color:C.gray }}><strong style={{ color:C.amber }}>Constraints:</strong> {q.constraints}</p>
-                    </div>
-                  )}
-                </div>
+                  {/* Scrollable Problem Statement & Details */}
+                  <div style={{ flex:1, overflowY:'auto', padding:'20px 24px 32px' }}>
+                    {/* Problem Title */}
+                    <h2 style={{ margin:'0 0 16px', fontSize:18, fontWeight:800, color:C.white, fontFamily:"'Sora',sans-serif", lineHeight:1.4 }}>
+                      {q.text}
+                    </h2>
 
-                {/* MCQ Options */}
-                {q.type === 'mcq' && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    {(q.opts || q.options || []).map((opt, i) => {
-                      const sel = parseInt(answers[q.id]) === i;
-                      return (
-                        <button key={i} onClick={() => setAnswers(a => ({...a, [q.id]: i}))}
-                          style={{ textAlign:'left', padding:'14px 18px', background:sel?`${C.violet}18`:'var(--bg-card-high)', border:`1px solid ${sel?C.violet:'var(--border)'}`, borderRadius:10, color:sel?C.white:C.light, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:12, fontFamily:"'Sora',sans-serif", transition:'all .15s' }}>
-                          <span style={{ width:28, height:28, borderRadius:7, background:sel?C.violet:'var(--bg-card-high)', border:`1px solid ${sel?C.violet:'var(--border)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:sel?'#fff':C.gray, flexShrink:0 }}>
-                            {['A','B','C','D'][i]}
-                          </span>
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                    {/* Rich Formatted Description */}
+                    {q.description && (
+                      <div
+                        style={{
+                          fontSize:14,
+                          color:'var(--text-secondary)',
+                          lineHeight:1.75,
+                          fontFamily:"'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                          background:'var(--bg-input)',
+                          padding:20,
+                          borderRadius:12,
+                          border:'1px solid var(--border)',
+                          marginBottom:16
+                        }}
+                        dangerouslySetInnerHTML={{ __html: formatMarkdown(q.description) }}
+                      />
+                    )}
 
-                {/* Coding / Technical Workspace with JDoodle Execution */}
-                {q.type !== 'mcq' && (() => {
-                  const currentLang = getLang(q.id);
-                  const currentCode = answers[q.id] !== undefined ? answers[q.id] : (q.starterCode || STARTER_BOILERPLATES[currentLang] || '');
-                  const currentStdin = customInputs[q.id] || '';
-                  const out = runOutputs[q.id];
-                  const isOpenStdin = !!showStdinMap[q.id];
-                  const lineCount = (currentCode || '').split('\n').length;
-                  const charCount = (currentCode || '').length;
-
-                  return (
-                    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-                      {/* Editor Toolbar */}
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, background:'var(--bg-card-high)', padding:'10px 16px', borderRadius:'12px 12px 0 0', border:'1px solid var(--border)', borderBottom:'none' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <Code2 size={16} color={C.cyan} />
-                            <span style={{ fontSize:12, fontWeight:700, color:C.white }}>Language:</span>
-                          </div>
-                          <select
-                            value={currentLang}
-                            onChange={(e) => handleLangChange(q.id, e.target.value)}
-                            style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, color:C.white, outline:'none', cursor:'pointer' }}
-                          >
-                            {CODE_LANGUAGES.map(l => (
-                              <option key={l.id} value={l.id}>{l.label}</option>
-                            ))}
-                          </select>
-
-                          <button
-                            type="button"
-                            onClick={() => handleResetCode(q.id)}
-                            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:'1px solid var(--border)', borderRadius:7, color:C.gray, fontSize:11, cursor:'pointer' }}
-                            title="Reset code to template"
-                          >
-                            <RotateCcw size={11} /> Reset Template
-                          </button>
-                        </div>
-
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          {/* Toggle Custom Input */}
-                          <button
-                            type="button"
-                            onClick={() => setShowStdinMap(s => ({ ...s, [q.id]: !s[q.id] }))}
-                            style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:isOpenStdin ? `${C.amber}1a` : 'transparent', border:`1px solid ${isOpenStdin ? C.amber : 'var(--border)'}`, borderRadius:8, color:isOpenStdin ? C.amber : C.light, fontSize:12, cursor:'pointer' }}
-                          >
-                            <Terminal size={12} /> {isOpenStdin ? 'Hide stdin' : 'Custom Input (stdin)'}
-                          </button>
-
-                          {/* RUN CODE BUTTON (JDoodle Execution) */}
-                          <button
-                            type="button"
-                            onClick={() => handleRunCode(q.id)}
-                            disabled={runningCode}
-                            style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 18px', background:runningCode ? C.gray : 'linear-gradient(135deg, #4f46e5, #4338ca)', border:'none', borderRadius:8, color:'#ffffff', fontSize:12, fontWeight:700, cursor:runningCode ? 'not-allowed' : 'pointer', boxShadow:'0 2px 8px rgba(79,70,229,0.3)', transition:'all .2s' }}
-                          >
-                            {runningCode ? (
-                              <>
-                                <RefreshCw size={13} className="animate-spin" /> Running on JDoodle...
-                              </>
-                            ) : (
-                              <>
-                                <Play size={12} fill="#ffffff" /> Run Code
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Code Editor Textarea */}
-                      <div style={{ position:'relative', border:'1px solid var(--border)', borderRadius:'0 0 12px 12px', background:'#090d16', overflow:'hidden' }}>
-                        <textarea
-                          value={currentCode}
-                          onChange={(e) => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                          onKeyDown={(e) => handleCodeKeyDown(e, q.id)}
-                          placeholder={q.placeholder || '// Write your solution code here...\n// Standard input can be read if provided in Custom Input.'}
-                          rows={16}
-                          spellCheck={false}
-                          style={{
-                            width:'100%',
-                            background:'transparent',
-                            border:'none',
-                            padding:'16px',
-                            fontSize:13,
-                            color:'#f8fafc',
-                            resize:'vertical',
-                            outline:'none',
-                            lineHeight:1.65,
-                            fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace",
-                            boxSizing:'border-box',
-                            tabSize:4
-                          }}
-                        />
-
-                        {/* Editor footer bar */}
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 14px', background:'#0f172a', borderTop:'1px solid rgba(255,255,255,0.06)', fontSize:11, color:'#64748b' }}>
-                          <span>Lines: {lineCount} | Chars: {charCount} | Tab = 4 spaces</span>
-                          <span style={{ display:'flex', alignItems:'center', gap:5, color:'#38bdf8' }}>
-                            <span style={{ width:6, height:6, borderRadius:'50%', background:'#38bdf8', display:'inline-block' }} />
-                            JDoodle Cloud Execution Engine
+                    {/* Examples Card */}
+                    {q.examples && (
+                      <div style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
+                          <span style={{ fontSize:11, fontWeight:800, color:C.cyan, textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                            Examples / Test Cases
                           </span>
                         </div>
+                        <pre style={{ margin:0, fontSize:12.5, color:'#38bdf8', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", background:'var(--bg-card)', padding:12, borderRadius:8, border:'1px solid var(--border)', lineHeight:1.5 }}>
+                          {q.examples}
+                        </pre>
                       </div>
+                    )}
 
-                      {/* Optional Custom Input Box */}
-                      {isOpenStdin && (
-                        <div style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:10, padding:14 }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                            <span style={{ fontSize:12, fontWeight:700, color:C.light }}>Standard Input (stdin):</span>
-                            <span style={{ fontSize:10, color:C.gray }}>Passed to program during execution</span>
-                          </div>
-                          <textarea
-                            value={currentStdin}
-                            onChange={(e) => setCustomInputs(m => ({ ...m, [q.id]: e.target.value }))}
-                            placeholder="Enter any input lines your program expects (e.g. 5&#10;1 2 3 4 5)..."
-                            rows={3}
-                            style={{ width:'100%', background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:8, padding:10, fontSize:12, color:C.white, resize:'vertical', outline:'none', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", boxSizing:'border-box' }}
-                          />
+                    {/* Constraints Card */}
+                    {q.constraints && (
+                      <div style={{ background:'rgba(217,119,6,0.06)', border:'1px solid rgba(217,119,6,0.25)', borderRadius:10, padding:14 }}>
+                        <div style={{ fontSize:11, fontWeight:800, color:C.amber, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>
+                          Constraints
                         </div>
-                      )}
+                        <p style={{ margin:0, fontSize:12.5, color:C.light, lineHeight:1.6 }}>
+                          {q.constraints}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                      {/* Execution Output Console */}
-                      {out && (
-                        <div style={{ background:'#090d16', border:'1px solid #1e293b', borderRadius:12, padding:16, overflow:'hidden' }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8, borderBottom:'1px solid #1e293b', paddingBottom:10 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                              <Terminal size={14} color="#38bdf8" />
-                              <span style={{ fontSize:12, fontWeight:700, color:'#f8fafc' }}>Execution Console</span>
+                {/* ── RIGHT PANE: Coding Workspace / MCQ Options ───────────── */}
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  background: 'var(--bg-base)'
+                }}>
+                  {/* When Coding Question */}
+                  {q.type !== 'mcq' && (() => {
+                    const currentLang = getLang(q.id);
+                    const currentCode = answers[q.id] !== undefined ? answers[q.id] : (q.starterCode || STARTER_BOILERPLATES[currentLang] || '');
+                    const currentStdin = customInputs[q.id] || '';
+                    const out = runOutputs[q.id];
+                    const isOpenStdin = !!showStdinMap[q.id];
+                    const lineCount = (currentCode || '').split('\n').length;
+                    const charCount = (currentCode || '').length;
 
-                              {out.verdict && (
-                                <span style={{
-                                  fontSize:11,
-                                  fontWeight:700,
-                                  padding:'2px 8px',
-                                  borderRadius:6,
-                                  background: out.verdict === 'Accepted' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                                  color: out.verdict === 'Accepted' ? '#4ade80' : '#f87171',
-                                  border: `1px solid ${out.verdict === 'Accepted' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`
-                                }}>
-                                  {out.verdict}
-                                </span>
+                    return (
+                      <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, overflow:'hidden' }}>
+                        {/* Right Pane Topbar: Language selector & Actions */}
+                        <div style={{
+                          display:'flex',
+                          justifyContent:'space-between',
+                          alignItems:'center',
+                          flexWrap:'wrap',
+                          gap:8,
+                          padding:'10px 16px',
+                          background:'var(--bg-input)',
+                          borderBottom:'1px solid var(--border)',
+                          flexShrink:0
+                        }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                              <Code2 size={15} color={C.cyan} />
+                              <span style={{ fontSize:12, fontWeight:700, color:C.white }}>Language:</span>
+                            </div>
+                            <select
+                              value={currentLang}
+                              onChange={(e) => handleLangChange(q.id, e.target.value)}
+                              style={{ background:'var(--bg-card-high)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, color:C.white, outline:'none', cursor:'pointer' }}
+                            >
+                              {CODE_LANGUAGES.map(l => (
+                                <option key={l.id} value={l.id}>{l.label}</option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={() => handleResetCode(q.id)}
+                              style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:'1px solid var(--border)', borderRadius:7, color:C.gray, fontSize:11, cursor:'pointer' }}
+                              title="Reset code to starter template"
+                            >
+                              <RotateCcw size={11} /> Reset
+                            </button>
+                          </div>
+
+                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <button
+                              type="button"
+                              onClick={() => setShowStdinMap(s => ({ ...s, [q.id]: !s[q.id] }))}
+                              style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:isOpenStdin ? `${C.amber}1a` : 'transparent', border:`1px solid ${isOpenStdin ? C.amber : 'var(--border)'}`, borderRadius:8, color:isOpenStdin ? C.amber : C.light, fontSize:12, cursor:'pointer' }}
+                            >
+                              <Terminal size={12} /> {isOpenStdin ? 'Hide stdin' : 'Custom Input (stdin)'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRunCode(q.id)}
+                              disabled={runningCode}
+                              style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 18px', background:runningCode ? C.gray : 'linear-gradient(135deg, #4f46e5, #4338ca)', border:'none', borderRadius:8, color:'#ffffff', fontSize:12, fontWeight:700, cursor:runningCode ? 'not-allowed' : 'pointer', boxShadow:'0 2px 8px rgba(79,70,229,0.3)', transition:'all .2s' }}
+                            >
+                              {runningCode ? (
+                                <>
+                                  <RefreshCw size={13} className="animate-spin" /> Running on JDoodle...
+                                </>
+                              ) : (
+                                <>
+                                  <Play size={12} fill="#ffffff" /> Run Code
+                                </>
                               )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Editor Container (Fills available height) */}
+                        <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, position:'relative', background:'#090d16', overflow:'hidden' }}>
+                          <textarea
+                            value={currentCode}
+                            onChange={(e) => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                            onKeyDown={(e) => handleCodeKeyDown(e, q.id)}
+                            placeholder={q.placeholder || '// Write your solution code here...\n// Standard input can be read if provided in Custom Input.'}
+                            spellCheck={false}
+                            style={{
+                              flex:1,
+                              width:'100%',
+                              height:'100%',
+                              background:'transparent',
+                              border:'none',
+                              padding:'18px 20px',
+                              fontSize:13.5,
+                              color:'#f8fafc',
+                              resize:'none',
+                              outline:'none',
+                              lineHeight:1.7,
+                              fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace",
+                              boxSizing:'border-box',
+                              tabSize:4
+                            }}
+                          />
+
+                          {/* Editor status footer */}
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 16px', background:'#0f172a', borderTop:'1px solid rgba(255,255,255,0.06)', fontSize:11, color:'#64748b', flexShrink:0 }}>
+                            <span>Lines: {lineCount} | Chars: {charCount} | Tab = 4 spaces</span>
+                            <span style={{ display:'flex', alignItems:'center', gap:5, color:'#38bdf8' }}>
+                              <span style={{ width:6, height:6, borderRadius:'50%', background:'#38bdf8', display:'inline-block' }} />
+                              JDoodle Cloud Execution Engine
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Optional Custom Input Drawer */}
+                        {isOpenStdin && (
+                          <div style={{ background:'var(--bg-input)', borderTop:'1px solid var(--border)', padding:12, flexShrink:0 }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                              <span style={{ fontSize:11, fontWeight:700, color:C.light }}>Standard Input (stdin):</span>
+                              <span style={{ fontSize:10, color:C.gray }}>Passed to program during execution</span>
+                            </div>
+                            <textarea
+                              value={currentStdin}
+                              onChange={(e) => setCustomInputs(m => ({ ...m, [q.id]: e.target.value }))}
+                              placeholder="Enter any input lines your program expects..."
+                              rows={3}
+                              style={{ width:'100%', background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:8, padding:8, fontSize:12, color:C.white, resize:'vertical', outline:'none', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", boxSizing:'border-box' }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Execution Output Console */}
+                        {out && (
+                          <div style={{ background:'#090d16', borderTop:'1px solid #1e293b', padding:14, flexShrink:0, maxHeight:230, overflowY:'auto' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, flexWrap:'wrap', gap:8, borderBottom:'1px solid #1e293b', paddingBottom:6 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <Terminal size={14} color="#38bdf8" />
+                                <span style={{ fontSize:12, fontWeight:700, color:'#f8fafc' }}>Execution Console</span>
+
+                                {out.verdict && (
+                                  <span style={{
+                                    fontSize:11,
+                                    fontWeight:700,
+                                    padding:'2px 8px',
+                                    borderRadius:6,
+                                    background: out.verdict === 'Accepted' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                    color: out.verdict === 'Accepted' ? '#4ade80' : '#f87171',
+                                    border: `1px solid ${out.verdict === 'Accepted' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`
+                                  }}>
+                                    {out.verdict}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:11, color:'#64748b' }}>
+                                {out.time && <span>⏱ {out.time}</span>}
+                                {out.memory && out.memory !== 'N/A' && <span>💾 {out.memory}</span>}
+                                {out.engine && <span style={{ color:'#818cf8' }}>☁ {out.engine}</span>}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const text = [out.stdout, out.stderr].filter(Boolean).join('\n');
+                                    navigator.clipboard.writeText(text);
+                                    toast.success('Console output copied!');
+                                  }}
+                                  style={{ display:'flex', alignItems:'center', gap:4, background:'transparent', border:'1px solid #334155', borderRadius:6, padding:'2px 7px', color:'#94a3b8', fontSize:10, cursor:'pointer' }}
+                                >
+                                  <Copy size={10} /> Copy
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setRunOutputs(m => ({ ...m, [q.id]: null }))}
+                                  style={{ background:'transparent', border:'none', color:'#64748b', fontSize:11, cursor:'pointer' }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
                             </div>
 
-                            <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:11, color:'#64748b' }}>
-                              {out.time && <span>⏱ {out.time}</span>}
-                              {out.memory && out.memory !== 'N/A' && <span>💾 {out.memory}</span>}
-                              {out.engine && <span style={{ color:'#818cf8' }}>☁ {out.engine}</span>}
+                            {/* Stdout Output */}
+                            {out.stdout && (
+                              <div style={{ marginBottom: out.stderr ? 10 : 0 }}>
+                                <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', marginBottom:4 }}>Standard Output:</div>
+                                <pre style={{ margin:0, padding:10, background:'#020617', borderRadius:8, fontSize:12, color:'#4ade80', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:120, overflowY:'auto' }}>
+                                  {out.stdout}
+                                </pre>
+                              </div>
+                            )}
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const text = [out.stdout, out.stderr].filter(Boolean).join('\n');
-                                  navigator.clipboard.writeText(text);
-                                  toast.success('Console output copied!');
-                                }}
-                                style={{ display:'flex', alignItems:'center', gap:4, background:'transparent', border:'1px solid #334155', borderRadius:6, padding:'2px 7px', color:'#94a3b8', fontSize:10, cursor:'pointer' }}
-                              >
-                                <Copy size={10} /> Copy
-                              </button>
+                            {/* Stderr Output */}
+                            {out.stderr && (
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:700, color:'#f87171', marginBottom:4 }}>Compiler / Error Output:</div>
+                                <pre style={{ margin:0, padding:10, background:'#020617', borderRadius:8, fontSize:12, color:'#f87171', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:120, overflowY:'auto' }}>
+                                  {out.stderr}
+                                </pre>
+                              </div>
+                            )}
 
-                              <button
-                                type="button"
-                                onClick={() => setRunOutputs(m => ({ ...m, [q.id]: null }))}
-                                style={{ background:'transparent', border:'none', color:'#64748b', fontSize:11, cursor:'pointer' }}
-                              >
-                                ✕
-                              </button>
-                            </div>
+                            {!out.stdout && !out.stderr && (
+                              <p style={{ margin:0, fontSize:12, color:'#64748b', fontStyle:'italic' }}>
+                                Program executed cleanly with no output.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Navigation & Submit Bar */}
+                        <div style={{
+                          display:'flex',
+                          justifyContent:'space-between',
+                          alignItems:'center',
+                          padding:'12px 20px',
+                          background:'var(--bg-input)',
+                          borderTop:'1px solid var(--border)',
+                          flexShrink:0
+                        }}>
+                          <div style={{ display:'flex', gap:10 }}>
+                            <button
+                              onClick={() => setCurrent(c => Math.max(0, c - 1))}
+                              disabled={current === 0}
+                              style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 16px', background:'transparent', border:'1px solid var(--border)', borderRadius:9, color:current === 0 ? C.gray : C.white, fontSize:13, cursor:current === 0 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                            >
+                              <ChevronLeft size={16}/> Previous
+                            </button>
+                            <button
+                              onClick={handleClearAnswer}
+                              style={{ padding:'9px 14px', background:'transparent', border:`1px solid ${C.red}33`, borderRadius:9, color:C.red, fontSize:12, cursor:'pointer', fontFamily:"'Sora',sans-serif" }}
+                            >
+                              Clear
+                            </button>
                           </div>
 
-                          {/* Stdout Output */}
-                          {out.stdout && (
-                            <div style={{ marginBottom: out.stderr ? 12 : 0 }}>
-                              <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', marginBottom:4 }}>Standard Output:</div>
-                              <pre style={{ margin:0, padding:12, background:'#020617', borderRadius:8, fontSize:12, color:'#4ade80', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:200, overflowY:'auto' }}>
-                                {out.stdout}
-                              </pre>
-                            </div>
-                          )}
+                          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                            {/* Submit & Next Button */}
+                            <button
+                              onClick={handleSubmitAndNext}
+                              style={{
+                                display:'flex',
+                                alignItems:'center',
+                                gap:8,
+                                padding:'10px 22px',
+                                background:'linear-gradient(135deg, #16a34a, #15803d)',
+                                border:'none',
+                                borderRadius:9,
+                                color:'#ffffff',
+                                fontSize:13,
+                                fontWeight:700,
+                                cursor:'pointer',
+                                fontFamily:"'Sora',sans-serif",
+                                boxShadow:'0 2px 10px rgba(22,163,74,0.3)',
+                                transition:'all .15s'
+                              }}
+                            >
+                              <Check size={16}/> {current === questions.length - 1 ? 'Submit & Review' : 'Submit & Next'}
+                            </button>
 
-                          {/* Stderr Output */}
-                          {out.stderr && (
-                            <div>
-                              <div style={{ fontSize:11, fontWeight:700, color:'#f87171', marginBottom:4 }}>Error / Compiler Output:</div>
-                              <pre style={{ margin:0, padding:12, background:'#020617', borderRadius:8, fontSize:12, color:'#f87171', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:200, overflowY:'auto' }}>
-                                {out.stderr}
-                              </pre>
-                            </div>
-                          )}
-
-                          {/* Neither */}
-                          {!out.stdout && !out.stderr && (
-                            <p style={{ margin:0, fontSize:12, color:'#64748b', fontStyle:'italic' }}>
-                              Program executed cleanly with no output.
-                            </p>
-                          )}
+                            {/* Skip / Next Button */}
+                            <button
+                              onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
+                              disabled={current === questions.length - 1}
+                              style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 16px', background:'var(--bg-card-high)', border:'1px solid var(--border)', borderRadius:9, color:current === questions.length - 1 ? C.gray : C.white, fontSize:13, fontWeight:600, cursor:current === questions.length - 1 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                            >
+                              Next <ChevronRight size={15}/>
+                            </button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                      </div>
+                    );
+                  })()}
 
-                {/* Navigation & Submit Bar */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:28, gap:12, flexWrap:'wrap' }}>
-                  <div style={{ display:'flex', gap:10 }}>
-                    <button
-                      onClick={() => setCurrent(c => Math.max(0, c - 1))}
-                      disabled={current === 0}
-                      style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'transparent', border:'1px solid var(--border)', borderRadius:9, color:current === 0 ? C.gray : C.white, fontSize:13, cursor:current === 0 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
-                    >
-                      <ChevronLeft size={16}/> Previous
-                    </button>
-                    <button
-                      onClick={handleClearAnswer}
-                      style={{ padding:'10px 16px', background:'transparent', border:`1px solid ${C.red}33`, borderRadius:9, color:C.red, fontSize:12, cursor:'pointer', fontFamily:"'Sora',sans-serif" }}
-                    >
-                      Clear
-                    </button>
-                  </div>
+                  {/* When MCQ Question */}
+                  {q.type === 'mcq' && (
+                    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, overflow:'hidden' }}>
+                      <div style={{ flex:1, overflowY:'auto', padding:28 }}>
+                        <p style={{ margin:'0 0 16px', fontSize:13, fontWeight:700, color:C.gray, textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                          Select Your Answer:
+                        </p>
+                        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                          {(q.opts || q.options || []).map((opt, i) => {
+                            const sel = parseInt(answers[q.id]) === i;
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => setAnswers(a => ({...a, [q.id]: i}))}
+                                style={{
+                                  textAlign:'left',
+                                  padding:'16px 20px',
+                                  background: sel ? `${C.violet}18` : 'var(--bg-card-high)',
+                                  border: `1px solid ${sel ? C.violet : 'var(--border)'}`,
+                                  borderRadius: 12,
+                                  color: sel ? C.white : C.light,
+                                  fontSize: 14,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 14,
+                                  fontFamily: "'Sora',sans-serif",
+                                  transition: 'all .15s'
+                                }}
+                              >
+                                <span style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 8,
+                                  background: sel ? C.violet : 'var(--bg-input)',
+                                  border: `1px solid ${sel ? C.violet : 'var(--border)'}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  color: sel ? '#fff' : C.gray,
+                                  flexShrink: 0
+                                }}>
+                                  {['A','B','C','D'][i]}
+                                </span>
+                                <span style={{ fontSize:14, lineHeight:1.5 }}>{opt}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                    {/* Submit & Next Button */}
-                    <button
-                      onClick={handleSubmitAndNext}
-                      style={{
+                      {/* Navigation & Submit Bar */}
+                      <div style={{
                         display:'flex',
+                        justifyContent:'space-between',
                         alignItems:'center',
-                        gap:8,
-                        padding:'11px 22px',
-                        background:'linear-gradient(135deg, #16a34a, #15803d)',
-                        border:'none',
-                        borderRadius:9,
-                        color:'#ffffff',
-                        fontSize:13,
-                        fontWeight:700,
-                        cursor:'pointer',
-                        fontFamily:"'Sora',sans-serif",
-                        boxShadow:'0 2px 10px rgba(22,163,74,0.3)',
-                        transition:'all .15s'
-                      }}
-                    >
-                      <Check size={16}/> {current === questions.length - 1 ? 'Submit & Review' : 'Submit & Next'}
-                    </button>
+                        padding:'14px 24px',
+                        background:'var(--bg-input)',
+                        borderTop:'1px solid var(--border)',
+                        flexShrink:0
+                      }}>
+                        <div style={{ display:'flex', gap:10 }}>
+                          <button
+                            onClick={() => setCurrent(c => Math.max(0, c - 1))}
+                            disabled={current === 0}
+                            style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'transparent', border:'1px solid var(--border)', borderRadius:9, color:current === 0 ? C.gray : C.white, fontSize:13, cursor:current === 0 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                          >
+                            <ChevronLeft size={16}/> Previous
+                          </button>
+                          <button
+                            onClick={handleClearAnswer}
+                            style={{ padding:'10px 16px', background:'transparent', border:`1px solid ${C.red}33`, borderRadius:9, color:C.red, fontSize:12, cursor:'pointer', fontFamily:"'Sora',sans-serif" }}
+                          >
+                            Clear
+                          </button>
+                        </div>
 
-                    {/* Skip / Next Button */}
-                    <button
-                      onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
-                      disabled={current === questions.length - 1}
-                      style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'var(--bg-card-high)', border:'1px solid var(--border)', borderRadius:9, color:current === questions.length - 1 ? C.gray : C.white, fontSize:13, fontWeight:600, cursor:current === questions.length - 1 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
-                    >
-                      Next <ChevronRight size={15}/>
-                    </button>
-                  </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                          <button
+                            onClick={handleSubmitAndNext}
+                            style={{
+                              display:'flex',
+                              alignItems:'center',
+                              gap:8,
+                              padding:'11px 24px',
+                              background:'linear-gradient(135deg, #16a34a, #15803d)',
+                              border:'none',
+                              borderRadius:9,
+                              color:'#ffffff',
+                              fontSize:13,
+                              fontWeight:700,
+                              cursor:'pointer',
+                              fontFamily:"'Sora',sans-serif",
+                              boxShadow:'0 2px 10px rgba(22,163,74,0.3)',
+                              transition:'all .15s'
+                            }}
+                          >
+                            <Check size={16}/> {current === questions.length - 1 ? 'Submit & Review' : 'Submit & Next'}
+                          </button>
+
+                          <button
+                            onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
+                            disabled={current === questions.length - 1}
+                            style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'var(--bg-card-high)', border:'1px solid var(--border)', borderRadius:9, color:current === questions.length - 1 ? C.gray : C.white, fontSize:13, fontWeight:600, cursor:current === questions.length - 1 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                          >
+                            Next <ChevronRight size={15}/>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
