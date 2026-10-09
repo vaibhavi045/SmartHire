@@ -259,7 +259,38 @@ export default function MockOA() {
 
   // Split Workspace & Palette Layout sizing controls
   const [paletteOpen, setPaletteOpen] = useState(true);
-  const [codingSplit, setCodingSplit] = useState('wide'); // 'balanced' (42%), 'wide' (32%), 'focus' (24%)
+  const [leftWidthPercent, setLeftWidthPercent] = useState(46); // Default 46% question, 54% code
+  const splitContainerRef = useRef(null);
+  const isDraggingSplitRef = useRef(false);
+
+  const handleDividerMouseDown = (e) => {
+    e.preventDefault();
+    isDraggingSplitRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (moveEvent) => {
+      if (!isDraggingSplitRef.current) return;
+      const container = splitContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newWidth = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      if (newWidth >= 28 && newWidth <= 68) {
+        setLeftWidthPercent(Math.round(newWidth));
+      }
+    };
+
+    const onMouseUp = () => {
+      isDraggingSplitRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   // DB-fetched company-uploaded tests
   const [dbTests,     setDbTests]     = useState([]);
@@ -725,7 +756,20 @@ export default function MockOA() {
     const isCompanyTest = test?.source === 'company';
 
     return (
-      <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column' }}>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        background: C.bg,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        zIndex: 500
+      }}>
         <style>{`
           .no-select-pane, .no-select-pane * {
             -webkit-user-select: none !important;
@@ -740,7 +784,7 @@ export default function MockOA() {
         `}</style>
 
         {/* Top bar */}
-        <div style={{ background:'var(--bg-input)', borderBottom:'1px solid var(--border)', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ background:'var(--bg-input)', borderBottom:'1px solid var(--border)', padding:'10px 22px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, zIndex:100 }}>
           <div>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2 }}>
               <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.white }}>{test.title}</p>
@@ -885,7 +929,7 @@ export default function MockOA() {
           </div>
 
           {/* Main Assessment Split Workspace (Question on Left, Coding/Options on Right) */}
-          <div style={{ flex:1, display:'flex', minWidth:0, overflow:'hidden' }}>
+          <div ref={splitContainerRef} style={{ flex:1, display:'flex', minWidth:0, minHeight:0, height:'100%', overflow:'hidden' }}>
             {q && (
               <>
                 {/* ── LEFT PANE: Question Description & Details ──────────── */}
@@ -924,13 +968,15 @@ export default function MockOA() {
                   onDragStart={(e) => { e.preventDefault(); return false; }}
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); return false; }}
                   style={{
-                    width: q.type === 'mcq' ? '50%' : codingSplit === 'focus' ? '24%' : codingSplit === 'wide' ? '32%' : '42%',
-                    minWidth: q.type === 'mcq' ? 320 : codingSplit === 'focus' ? 240 : 280,
-                    maxWidth: q.type === 'mcq' ? undefined : codingSplit === 'focus' ? 360 : codingSplit === 'wide' ? 460 : 560,
+                    width: q.type === 'mcq' ? '50%' : `${leftWidthPercent}%`,
+                    minWidth: q.type === 'mcq' ? 320 : 320,
+                    maxWidth: q.type === 'mcq' ? undefined : '70%',
+                    height: '100%',
                     borderRight: '1px solid var(--border)',
                     display: 'flex',
                     flexDirection: 'column',
                     background: 'var(--bg-card)',
+                    minHeight: 0,
                     overflow: 'hidden',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
@@ -1020,12 +1066,39 @@ export default function MockOA() {
                   </div>
                 </div>
 
+                {/* Draggable Divider between Question & Code */}
+                {q.type !== 'mcq' && (
+                  <div
+                    onMouseDown={handleDividerMouseDown}
+                    style={{
+                      width: 6,
+                      height: '100%',
+                      cursor: 'col-resize',
+                      background: 'var(--border)',
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s',
+                      userSelect: 'none',
+                      zIndex: 10
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#4f46e5'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--border)'}
+                    title="Drag to resize Question and Code panes"
+                  >
+                    <div style={{ width: 2, height: 28, borderRadius: 1, background: 'rgba(255,255,255,0.35)' }} />
+                  </div>
+                )}
+
                 {/* ── RIGHT PANE: Coding Workspace / MCQ Options ───────────── */}
                 <div style={{
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
                   minWidth: 0,
+                  height: '100%',
+                  minHeight: 0,
                   overflow: 'hidden',
                   background: 'var(--bg-base)'
                 }}>
@@ -1077,30 +1150,30 @@ export default function MockOA() {
                               <RotateCcw size={11} /> Reset
                             </button>
 
-                            {/* Editor Size Preset Toggle */}
+                            {/* Width Presets */}
                             <div style={{ display:'flex', alignItems:'center', gap:3, background:'var(--bg-card-high)', padding:'3px 4px', borderRadius:8, border:'1px solid var(--border)' }}>
-                              <span style={{ fontSize:10.5, fontWeight:700, color:C.gray, paddingLeft:4, paddingRight:2 }}>Editor:</span>
+                              <span style={{ fontSize:10.5, fontWeight:700, color:C.gray, paddingLeft:4, paddingRight:2 }}>Split:</span>
                               {[
-                                { id: 'balanced', label: 'Balanced' },
-                                { id: 'wide', label: 'Wide' },
-                                { id: 'focus', label: 'Max' }
+                                { label: '46% Q', pct: 46, title: 'Comfortable Question (46% Question / 54% Code)' },
+                                { label: '38% Q', pct: 38, title: 'Wider Code (38% Question / 62% Code)' },
+                                { label: '30% Q', pct: 30, title: 'Max Code (30% Question / 70% Code)' }
                               ].map(s => (
                                 <button
-                                  key={s.id}
+                                  key={s.pct}
                                   type="button"
-                                  onClick={() => setCodingSplit(s.id)}
+                                  onClick={() => setLeftWidthPercent(s.pct)}
                                   style={{
                                     padding: '3px 8px',
                                     borderRadius: 6,
                                     fontSize: 10.5,
                                     fontWeight: 700,
-                                    background: codingSplit === s.id ? '#4f46e5' : 'transparent',
-                                    color: codingSplit === s.id ? '#ffffff' : 'var(--text-secondary)',
+                                    background: leftWidthPercent === s.pct ? '#4f46e5' : 'transparent',
+                                    color: leftWidthPercent === s.pct ? '#ffffff' : 'var(--text-secondary)',
                                     border: 'none',
                                     cursor: 'pointer',
                                     transition: 'all 0.15s'
                                   }}
-                                  title={`${s.label} editor size`}
+                                  title={s.title}
                                 >
                                   {s.label}
                                 </button>
@@ -1158,7 +1231,8 @@ export default function MockOA() {
                               lineHeight:1.75,
                               fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace",
                               boxSizing:'border-box',
-                              tabSize:4
+                              tabSize:4,
+                              overflowY:'auto'
                             }}
                           />
 
