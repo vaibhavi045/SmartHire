@@ -686,6 +686,18 @@ export default function MockOA() {
 
     return (
       <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column' }}>
+        <style>{`
+          .no-select-pane, .no-select-pane * {
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+          }
+          .no-select-pane ::selection {
+            background: transparent !important;
+            color: inherit !important;
+          }
+        `}</style>
 
         {/* Top bar */}
         <div style={{ background:'var(--bg-input)', borderBottom:'1px solid var(--border)', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:100 }}>
@@ -730,7 +742,12 @@ export default function MockOA() {
         <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
 
           {/* Question palette */}
-          <div style={{ width:220, background:'var(--bg-input)', borderRight:'1px solid var(--border)', padding:16, overflowY:'auto', flexShrink:0 }}>
+          <div
+            className="no-select-pane"
+            onSelectStart={(e) => { e.preventDefault(); return false; }}
+            onContextMenu={(e) => { e.preventDefault(); return false; }}
+            style={{ width:220, background:'var(--bg-input)', borderRight:'1px solid var(--border)', padding:16, overflowY:'auto', flexShrink:0, userSelect:'none', WebkitUserSelect:'none' }}
+          >
             <p style={{ margin:'0 0 12px', fontSize:11, fontWeight:700, color:C.gray, textTransform:'uppercase', letterSpacing:'0.07em' }}>Question Palette</p>
             {sections.map(sec => {
               const sqs = questions.filter(q => q.section === sec);
@@ -771,15 +788,54 @@ export default function MockOA() {
             {q && (
               <>
                 {/* ── LEFT PANE: Question Description & Details ──────────── */}
-                <div style={{
-                  width: q.type === 'mcq' ? '50%' : '48%',
-                  minWidth: 320,
-                  borderRight: '1px solid var(--border)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  background: 'var(--bg-card)',
-                  overflow: 'hidden'
-                }}>
+                <div
+                  className="no-select-pane"
+                  onCopy={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.clipboardData) {
+                      try {
+                        e.clipboardData.clearData();
+                        e.clipboardData.setData('text/plain', '');
+                      } catch (_) {}
+                    }
+                    try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText('').catch(() => {});
+                    }
+                    toast.error('Copying question text is prohibited in proctored exam', { id: 'no-copy-toast', duration: 2500 });
+                  }}
+                  onCut={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.clipboardData) {
+                      try {
+                        e.clipboardData.clearData();
+                        e.clipboardData.setData('text/plain', '');
+                      } catch (_) {}
+                    }
+                    try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText('').catch(() => {});
+                    }
+                  }}
+                  onSelectStart={(e) => { e.preventDefault(); return false; }}
+                  onDragStart={(e) => { e.preventDefault(); return false; }}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); return false; }}
+                  style={{
+                    width: q.type === 'mcq' ? '50%' : '48%',
+                    minWidth: 320,
+                    borderRight: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    background: 'var(--bg-card)',
+                    overflow: 'hidden',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                    MozUserSelect: 'none',
+                    msUserSelect: 'none'
+                  }}
+                >
                   {/* Q header */}
                   <div style={{
                     display:'flex',
@@ -1145,7 +1201,52 @@ export default function MockOA() {
 
                   {/* When MCQ Question */}
                   {q.type === 'mcq' && (
-                    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, overflow:'hidden' }}>
+                    <div
+                      className="no-select-pane"
+                      onCopy={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.clipboardData) {
+                          try {
+                            e.clipboardData.clearData();
+                            e.clipboardData.setData('text/plain', '');
+                          } catch (_) {}
+                        }
+                        try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+                        if (navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText('').catch(() => {});
+                        }
+                        toast.error('Copying is prohibited in proctored exam', { id: 'no-copy-toast', duration: 2500 });
+                      }}
+                      onCut={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.clipboardData) {
+                          try {
+                            e.clipboardData.clearData();
+                            e.clipboardData.setData('text/plain', '');
+                          } catch (_) {}
+                        }
+                        try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+                        if (navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText('').catch(() => {});
+                        }
+                      }}
+                      onSelectStart={(e) => { e.preventDefault(); return false; }}
+                      onDragStart={(e) => { e.preventDefault(); return false; }}
+                      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); return false; }}
+                      style={{
+                        display:'flex',
+                        flexDirection:'column',
+                        flex:1,
+                        minHeight:0,
+                        overflow:'hidden',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                    >
                       <div style={{ flex:1, overflowY:'auto', padding:28 }}>
                         <p style={{ margin:'0 0 16px', fontSize:13, fontWeight:700, color:C.gray, textTransform:'uppercase', letterSpacing:'0.06em' }}>
                           Select Your Answer:

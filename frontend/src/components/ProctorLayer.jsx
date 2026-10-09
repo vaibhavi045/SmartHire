@@ -114,22 +114,56 @@ export default function ProctorLayer({
 
     const blockClipboard = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      if (e.clipboardData) {
+        try {
+          e.clipboardData.clearData();
+          e.clipboardData.setData('text/plain', '');
+        } catch (_) {}
+      }
+      try {
+        window.getSelection()?.removeAllRanges();
+      } catch (_) {}
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText('').catch(() => {});
+      }
       const t = e.type; // copy | cut | paste
       record(t, `${t.charAt(0).toUpperCase() + t.slice(1)} is disabled during the exam`);
     };
     const onContextMenu = (e) => {
       e.preventDefault();
+      e.stopPropagation();
       record('context_menu', 'Right-click is disabled during the exam', { silent: true });
+    };
+
+    const onKeyDown = (e) => {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+      if (isCmdOrCtrl) {
+        const key = e.key.toLowerCase();
+        if (key === 'c' || key === 'x' || key === 'u' || key === 'p' || key === 's') {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            window.getSelection()?.removeAllRanges();
+          } catch (_) {}
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText('').catch(() => {});
+          }
+          if (key === 'c') record('copy', 'Copying content is blocked during the exam');
+          else if (key === 'x') record('cut', 'Cutting content is blocked during the exam');
+        }
+      }
     };
 
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
     window.addEventListener('blur', onWindowBlur);
     document.addEventListener('visibilitychange', onVisibility);
-    document.addEventListener('copy', blockClipboard);
-    document.addEventListener('cut', blockClipboard);
-    document.addEventListener('paste', blockClipboard);
-    document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('copy', blockClipboard, true);
+    document.addEventListener('cut', blockClipboard, true);
+    document.addEventListener('paste', blockClipboard, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
+    document.addEventListener('keydown', onKeyDown, true);
 
     setIsFullscreen(!!fsElement());
 
@@ -199,10 +233,11 @@ export default function ProctorLayer({
       document.removeEventListener('webkitfullscreenchange', onFsChange);
       window.removeEventListener('blur', onWindowBlur);
       document.removeEventListener('visibilitychange', onVisibility);
-      document.removeEventListener('copy', blockClipboard);
-      document.removeEventListener('cut', blockClipboard);
-      document.removeEventListener('paste', blockClipboard);
-      document.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('copy', blockClipboard, true);
+      document.removeEventListener('cut', blockClipboard, true);
+      document.removeEventListener('paste', blockClipboard, true);
+      document.removeEventListener('contextmenu', onContextMenu, true);
+      document.removeEventListener('keydown', onKeyDown, true);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
       const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
       if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) exit.call(document).catch(() => {});
