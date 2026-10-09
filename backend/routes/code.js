@@ -16,7 +16,8 @@ router.get('/status', async (req, res) => {
 
 // POST /api/code/run — execute code
 router.post('/run', auth, async (req, res) => {
-  const { code, language, stdin = '' } = req.body;
+  const { code, language } = req.body;
+  const stdin = req.body.stdin !== undefined ? req.body.stdin : (req.body.input || '');
 
   if (!code || !language)
     return res.status(400).json({ error: 'code and language are required' });

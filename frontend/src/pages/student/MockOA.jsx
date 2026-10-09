@@ -7,7 +7,8 @@ import {
   Send, AlertTriangle, CheckCircle, XCircle, BarChart2,
   Eye, EyeOff, Flag, RefreshCw, TrendingUp, Award,
   Code2, Brain, Cpu, Database, Globe, Layers,
-  Monitor, Wifi, BookOpen, Star, Sparkles
+  Monitor, Wifi, BookOpen, Star, Sparkles,
+  Play, Terminal, Check, RotateCcw, Copy
 } from 'lucide-react';
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -25,6 +26,21 @@ const C = {
 };
 const TYPE_COLOR = { aptitude: C.cyan, technical: C.violet, behavioural: C.amber };
 const TYPE_ICON  = { aptitude: Brain, technical: Cpu, behavioural: BookOpen };
+
+// ── Supported Execution Languages & Starter Templates ───────────────────────
+const CODE_LANGUAGES = [
+  { id: 'python3', label: 'Python 3', ext: '.py' },
+  { id: 'cpp', label: 'C++ 17', ext: '.cpp' },
+  { id: 'java', label: 'Java (OpenJDK)', ext: '.java' },
+  { id: 'javascript', label: 'JavaScript (Node.js)', ext: '.js' },
+];
+
+const STARTER_BOILERPLATES = {
+  python3: `# Write your Python 3 solution here\nimport sys\n\ndef solve():\n    # Read from standard input if required\n    # lines = sys.stdin.read().splitlines()\n    print("Program executed successfully")\n\nif __name__ == '__main__':\n    solve()\n`,
+  cpp: `// Write your C++ 17 solution here\n#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\nint main() {\n    // Read input from cin if required\n    cout << "Program executed successfully" << endl;\n    return 0;\n}\n`,
+  java: `// Write your Java solution here\nimport java.util.*;\n\npublic class Solution {\n    public static void main(String[] args) {\n        // Read input using Scanner if required\n        System.out.println("Program executed successfully");\n    }\n}\n`,
+  javascript: `// Write your JavaScript (Node.js) solution here\nconst fs = require('fs');\n\nfunction solve() {\n    console.log("Program executed successfully");\n}\n\nsolve();\n`,
+};
 
 
 // ── Score calculator ───────────────────────────────────────────────────────
@@ -52,7 +68,7 @@ function calcScore(test, answers, questions) {
         earned = Math.max(0, earned - neg); wrong++;
         breakdown[section].wrong++;
       }
-    } else if (q.type === 'text') {
+    } else if (q.type !== 'mcq') {
       const resp = answers[q.id] || '';
       const wordCount = resp.trim().split(/\s+/).filter(Boolean).length;
       const pts = Math.round(q.marks * Math.min(wordCount / 100, 1) * 0.7);
@@ -95,6 +111,12 @@ export default function MockOA() {
   const [result,      setResult]      = useState(null);
   const [submitting,  setSubmitting]  = useState(false);
   const [flagged,     setFlagged]     = useState(new Set());
+  const [submittedQuestions, setSubmittedQuestions] = useState(new Set());
+  const [codeLangs,     setCodeLangs]     = useState({});
+  const [customInputs,  setCustomInputs]  = useState({});
+  const [showStdinMap,  setShowStdinMap]  = useState({});
+  const [runOutputs,    setRunOutputs]    = useState({});
+  const [runningCode,   setRunningCode]   = useState(false);
 
   // Proctoring: violations accumulate here for the whole attempt.
   const proctorRef = useRef([]);
@@ -106,6 +128,139 @@ export default function MockOA() {
 
   const timerRef = useRef(null);
   const startRef = useRef(null);
+
+  // ── Code execution & submission helpers ─────────────────────────────────
+  const getLang = (qId) => codeLangs[qId] || 'python3';
+
+  const handleLangChange = (qId, newLang) => {
+    setCodeLangs(prev => ({ ...prev, [qId]: newLang }));
+    const currentCode = answers[qId] || '';
+    const isOldBoilerplate = Object.values(STARTER_BOILERPLATES).some(b => b.trim() === currentCode.trim());
+    if (!currentCode.trim() || isOldBoilerplate) {
+      setAnswers(prev => ({ ...prev, [qId]: STARTER_BOILERPLATES[newLang] || '' }));
+    }
+  };
+
+  const handleResetCode = (qId) => {
+    const qObj = questions.find(x => x.id === qId);
+    const lang = getLang(qId);
+    const template = qObj?.starterCode || STARTER_BOILERPLATES[lang] || '';
+    setAnswers(prev => ({ ...prev, [qId]: template }));
+    setRunOutputs(prev => ({ ...prev, [qId]: null }));
+    toast.success('Code editor reset to starter template');
+  };
+
+  const handleCodeKeyDown = (e, qId) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const target = e.target;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const val = target.value;
+      const newVal = val.substring(0, start) + '    ' + val.substring(end);
+      setAnswers(a => ({ ...a, [qId]: newVal }));
+      setTimeout(() => {
+        target.selectionStart = target.selectionEnd = start + 4;
+      }, 0);
+    }
+  };
+
+  const handleRunCode = async (qId) => {
+    const lang = getLang(qId);
+    const currentQ = questions.find(x => x.id === qId);
+    const code = answers[qId] !== undefined ? answers[qId] : (currentQ?.starterCode || STARTER_BOILERPLATES[lang] || '');
+    if (!code || !code.trim()) {
+      toast.error('Please write some code before executing!');
+      return;
+    }
+    const stdin = customInputs[qId] || '';
+    setRunningCode(true);
+    setRunOutputs(prev => ({ ...prev, [qId]: { loading: true } }));
+
+    try {
+      const res = await api.post('/api/code/run', {
+        code,
+        language: lang,
+        stdin,
+      });
+      const data = res.data;
+      setRunOutputs(prev => ({ ...prev, [qId]: data }));
+      if (data.verdict === 'Accepted') {
+        toast.success(`Executed successfully (${data.engine || 'JDoodle'})!`, { id: 'run-toast' });
+      } else {
+        toast.error(`Execution: ${data.verdict || 'Check terminal output'}`, { id: 'run-toast' });
+      }
+    } catch (err) {
+      console.error('Run code error:', err);
+      const errMsg = err.response?.data?.error || err.message || 'Execution failed';
+      setRunOutputs(prev => ({
+        ...prev,
+        [qId]: {
+          verdict: 'Execution Failed',
+          stderr: errMsg,
+          stdout: '',
+          time: '0s',
+          memory: 'N/A',
+          engine: 'JDoodle Runner'
+        }
+      }));
+      toast.error(errMsg, { id: 'run-toast' });
+    } finally {
+      setRunningCode(false);
+    }
+  };
+
+  const handleSubmitAndNext = () => {
+    const currentQ = questions[current];
+    if (!currentQ) return;
+
+    if (currentQ.type === 'mcq') {
+      const ans = answers[currentQ.id];
+      if (ans === undefined || ans === null || ans === '') {
+        toast('Please select an option first (or click Next to skip)', { icon: 'ℹ️' });
+        return;
+      }
+      setSubmittedQuestions(prev => new Set(prev).add(currentQ.id));
+      toast.success(`Question ${current + 1} response submitted!`, { duration: 1500 });
+    } else {
+      const currentLang = getLang(currentQ.id);
+      const currentCode = answers[currentQ.id] !== undefined
+        ? answers[currentQ.id]
+        : (currentQ.starterCode || STARTER_BOILERPLATES[currentLang] || '');
+
+      if (!currentCode.trim()) {
+        toast('Please write code or solution before submitting (or click Next to skip)', { icon: 'ℹ️' });
+        return;
+      }
+
+      setAnswers(prev => ({ ...prev, [currentQ.id]: currentCode }));
+      setSubmittedQuestions(prev => new Set(prev).add(currentQ.id));
+      toast.success(`Question ${current + 1} code solution submitted!`, { duration: 1500 });
+    }
+
+    if (current < questions.length - 1) {
+      setCurrent(c => c + 1);
+    } else {
+      toast('All questions submitted! Review your answers or click Submit at the top to finalize.', { icon: '🎉', duration: 3500 });
+    }
+  };
+
+  const handleClearAnswer = () => {
+    const currentQ = questions[current];
+    if (!currentQ) return;
+    setAnswers(a => {
+      const next = { ...a };
+      delete next[currentQ.id];
+      return next;
+    });
+    setSubmittedQuestions(prev => {
+      const next = new Set(prev);
+      next.delete(currentQ.id);
+      return next;
+    });
+    setRunOutputs(m => ({ ...m, [currentQ.id]: null }));
+    toast('Answer cleared for this question');
+  };
 
   // ── Fetch approved company-uploaded tests from API ─────────────────────
   useEffect(() => {
@@ -199,6 +354,12 @@ export default function MockOA() {
     }
     setAnswers({});
     setFlagged(new Set());
+    setSubmittedQuestions(new Set());
+    setCodeLangs({});
+    setCustomInputs({});
+    setShowStdinMap({});
+    setRunOutputs({});
+    setRunningCode(false);
     setCurrent(0);
     setTimeLeft((catalogEntry.duration || 60) * 60);
     proctorRef.current = [];
@@ -421,7 +582,7 @@ export default function MockOA() {
   // ═══════════════════════════════════════════════════════════════════════
   if (screen === 'test') {
     const sections = [...new Set(questions.map(q => q.section))];
-    const answered = Object.keys(answers).filter(k => answers[k] !== undefined && answers[k] !== '').length;
+    const answered = questions.filter(pq => submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0)).length;
     const isCompanyTest = test?.source === 'company';
 
     return (
@@ -480,7 +641,7 @@ export default function MockOA() {
                   <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                     {sqs.map(pq => {
                       const globalIdx = questions.findIndex(x => x.id === pq.id);
-                      const isAns = answers[pq.id] !== undefined && answers[pq.id] !== '';
+                      const isAns = submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0);
                       const isFl  = flagged.has(pq.id);
                       const isCur = globalIdx === current;
                       const bgc   = isCur ? C.cyan : isFl ? C.amber : isAns ? C.green : 'var(--bg-card-high)';
@@ -509,14 +670,14 @@ export default function MockOA() {
           {/* Question area */}
           <div style={{ flex:1, overflowY:'auto', padding:32 }}>
             {q && (
-              <div style={{ maxWidth:800, margin:'0 auto' }}>
+              <div style={{ maxWidth:920, margin:'0 auto' }}>
 
                 {/* Q header */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                     <span style={{ background:'var(--bg-card-high)', borderRadius:8, padding:'4px 12px', fontSize:12, fontWeight:700, color:C.white }}>Q {current+1} of {questions.length}</span>
                     <span style={{ background:`${TYPE_COLOR[test.type]||C.violet}18`, borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:700, color:TYPE_COLOR[test.type]||C.violet, textTransform:'capitalize' }}>
-                      {q.type === 'text' ? 'Descriptive' : 'MCQ'}
+                      {q.type === 'mcq' ? 'MCQ' : 'Coding / Technical'}
                     </span>
                     <span style={{ fontSize:11, color:C.gray }}>{q.section}</span>
                     <span style={{ fontSize:11, color:C.amber, fontWeight:700 }}>[{q.marks} marks]</span>
@@ -534,6 +695,17 @@ export default function MockOA() {
                   {q.description && (
                     <div style={{ fontSize:14, color:'var(--text-secondary)', lineHeight:1.75, whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", background:'var(--bg-card)', padding:18, borderRadius:10, border:'1px solid var(--border)', maxHeight:420, overflowY:'auto' }}>
                       {q.description}
+                    </div>
+                  )}
+                  {q.examples && (
+                    <div style={{ marginTop:14, padding:14, background:'var(--bg-card)', borderRadius:8, border:'1px solid var(--border)' }}>
+                      <p style={{ margin:'0 0 6px', fontSize:11, fontWeight:700, color:C.gray, textTransform:'uppercase' }}>Sample Input & Output:</p>
+                      <pre style={{ margin:0, fontSize:12, color:C.white, whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace" }}>{q.examples}</pre>
+                    </div>
+                  )}
+                  {q.constraints && (
+                    <div style={{ marginTop:10, padding:'8px 12px', background:'var(--bg-card)', borderRadius:6, border:'1px solid var(--border)' }}>
+                      <p style={{ margin:0, fontSize:11, color:C.gray }}><strong style={{ color:C.amber }}>Constraints:</strong> {q.constraints}</p>
                     </div>
                   )}
                 </div>
@@ -556,39 +728,260 @@ export default function MockOA() {
                   </div>
                 )}
 
-                {/* Text / Coding Area */}
-                {q.type === 'text' && (
-                  <div>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                      <span style={{ fontSize:12, fontWeight:700, color:C.light }}>Write Your Code / Solution:</span>
-                      <span style={{ fontSize:11, color:C.gray }}>
-                        Lines: {(answers[q.id]||'').split('\n').length} | Chars: {(answers[q.id]||'').length}
-                      </span>
-                    </div>
-                    <textarea
-                      value={answers[q.id] || ''}
-                      onChange={e => setAnswers(a => ({...a, [q.id]: e.target.value}))}
-                      placeholder={q.placeholder || '// Write your solution, code (Python/C++/Java), or approach here...'}
-                      rows={14}
-                      style={{ width:'100%', background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:10, padding:16, fontSize:13, color:C.white, resize:'vertical', outline:'none', lineHeight:1.6, fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", boxSizing:'border-box' }}
-                    />
-                  </div>
-                )}
+                {/* Coding / Technical Workspace with JDoodle Execution */}
+                {q.type !== 'mcq' && (() => {
+                  const currentLang = getLang(q.id);
+                  const currentCode = answers[q.id] !== undefined ? answers[q.id] : (q.starterCode || STARTER_BOILERPLATES[currentLang] || '');
+                  const currentStdin = customInputs[q.id] || '';
+                  const out = runOutputs[q.id];
+                  const isOpenStdin = !!showStdinMap[q.id];
+                  const lineCount = (currentCode || '').split('\n').length;
+                  const charCount = (currentCode || '').length;
 
-                {/* Navigation */}
-                <div style={{ display:'flex', justifyContent:'space-between', marginTop:24 }}>
-                  <button onClick={() => setCurrent(c => Math.max(0,c-1))} disabled={current===0}
-                    style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 20px', background:'transparent', border:'1px solid var(--border)', borderRadius:9, color:current===0?C.gray:C.white, fontSize:13, cursor:current===0?'not-allowed':'pointer', fontFamily:"'Sora',sans-serif" }}>
-                    <ChevronLeft size={15}/> Previous
-                  </button>
-                  <button onClick={() => setAnswers(a => ({...a,[q.id]:undefined}))}
-                    style={{ padding:'10px 18px', background:'transparent', border:`1px solid ${C.red}33`, borderRadius:9, color:C.red, fontSize:12, cursor:'pointer', fontFamily:"'Sora',sans-serif" }}>
-                    Clear
-                  </button>
-                  <button onClick={() => setCurrent(c => Math.min(questions.length-1,c+1))} disabled={current===questions.length-1}
-                    style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 20px', background:C.cyan, border:'none', borderRadius:9, color:'#ffffff', fontSize:13, fontWeight:700, cursor:current===questions.length-1?'not-allowed':'pointer', fontFamily:"'Sora',sans-serif" }}>
-                    Next <ChevronRight size={15}/>
-                  </button>
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+                      {/* Editor Toolbar */}
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, background:'var(--bg-card-high)', padding:'10px 16px', borderRadius:'12px 12px 0 0', border:'1px solid var(--border)', borderBottom:'none' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <Code2 size={16} color={C.cyan} />
+                            <span style={{ fontSize:12, fontWeight:700, color:C.white }}>Language:</span>
+                          </div>
+                          <select
+                            value={currentLang}
+                            onChange={(e) => handleLangChange(q.id, e.target.value)}
+                            style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:7, padding:'5px 12px', fontSize:12, fontWeight:600, color:C.white, outline:'none', cursor:'pointer' }}
+                          >
+                            {CODE_LANGUAGES.map(l => (
+                              <option key={l.id} value={l.id}>{l.label}</option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => handleResetCode(q.id)}
+                            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:'1px solid var(--border)', borderRadius:7, color:C.gray, fontSize:11, cursor:'pointer' }}
+                            title="Reset code to template"
+                          >
+                            <RotateCcw size={11} /> Reset Template
+                          </button>
+                        </div>
+
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          {/* Toggle Custom Input */}
+                          <button
+                            type="button"
+                            onClick={() => setShowStdinMap(s => ({ ...s, [q.id]: !s[q.id] }))}
+                            style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:isOpenStdin ? `${C.amber}1a` : 'transparent', border:`1px solid ${isOpenStdin ? C.amber : 'var(--border)'}`, borderRadius:8, color:isOpenStdin ? C.amber : C.light, fontSize:12, cursor:'pointer' }}
+                          >
+                            <Terminal size={12} /> {isOpenStdin ? 'Hide stdin' : 'Custom Input (stdin)'}
+                          </button>
+
+                          {/* RUN CODE BUTTON (JDoodle Execution) */}
+                          <button
+                            type="button"
+                            onClick={() => handleRunCode(q.id)}
+                            disabled={runningCode}
+                            style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 18px', background:runningCode ? C.gray : 'linear-gradient(135deg, #4f46e5, #4338ca)', border:'none', borderRadius:8, color:'#ffffff', fontSize:12, fontWeight:700, cursor:runningCode ? 'not-allowed' : 'pointer', boxShadow:'0 2px 8px rgba(79,70,229,0.3)', transition:'all .2s' }}
+                          >
+                            {runningCode ? (
+                              <>
+                                <RefreshCw size={13} className="animate-spin" /> Running on JDoodle...
+                              </>
+                            ) : (
+                              <>
+                                <Play size={12} fill="#ffffff" /> Run Code
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Code Editor Textarea */}
+                      <div style={{ position:'relative', border:'1px solid var(--border)', borderRadius:'0 0 12px 12px', background:'#090d16', overflow:'hidden' }}>
+                        <textarea
+                          value={currentCode}
+                          onChange={(e) => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                          onKeyDown={(e) => handleCodeKeyDown(e, q.id)}
+                          placeholder={q.placeholder || '// Write your solution code here...\n// Standard input can be read if provided in Custom Input.'}
+                          rows={16}
+                          spellCheck={false}
+                          style={{
+                            width:'100%',
+                            background:'transparent',
+                            border:'none',
+                            padding:'16px',
+                            fontSize:13,
+                            color:'#f8fafc',
+                            resize:'vertical',
+                            outline:'none',
+                            lineHeight:1.65,
+                            fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace",
+                            boxSizing:'border-box',
+                            tabSize:4
+                          }}
+                        />
+
+                        {/* Editor footer bar */}
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 14px', background:'#0f172a', borderTop:'1px solid rgba(255,255,255,0.06)', fontSize:11, color:'#64748b' }}>
+                          <span>Lines: {lineCount} | Chars: {charCount} | Tab = 4 spaces</span>
+                          <span style={{ display:'flex', alignItems:'center', gap:5, color:'#38bdf8' }}>
+                            <span style={{ width:6, height:6, borderRadius:'50%', background:'#38bdf8', display:'inline-block' }} />
+                            JDoodle Cloud Execution Engine
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Optional Custom Input Box */}
+                      {isOpenStdin && (
+                        <div style={{ background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:10, padding:14 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:C.light }}>Standard Input (stdin):</span>
+                            <span style={{ fontSize:10, color:C.gray }}>Passed to program during execution</span>
+                          </div>
+                          <textarea
+                            value={currentStdin}
+                            onChange={(e) => setCustomInputs(m => ({ ...m, [q.id]: e.target.value }))}
+                            placeholder="Enter any input lines your program expects (e.g. 5&#10;1 2 3 4 5)..."
+                            rows={3}
+                            style={{ width:'100%', background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:8, padding:10, fontSize:12, color:C.white, resize:'vertical', outline:'none', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", boxSizing:'border-box' }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Execution Output Console */}
+                      {out && (
+                        <div style={{ background:'#090d16', border:'1px solid #1e293b', borderRadius:12, padding:16, overflow:'hidden' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8, borderBottom:'1px solid #1e293b', paddingBottom:10 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                              <Terminal size={14} color="#38bdf8" />
+                              <span style={{ fontSize:12, fontWeight:700, color:'#f8fafc' }}>Execution Console</span>
+
+                              {out.verdict && (
+                                <span style={{
+                                  fontSize:11,
+                                  fontWeight:700,
+                                  padding:'2px 8px',
+                                  borderRadius:6,
+                                  background: out.verdict === 'Accepted' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                  color: out.verdict === 'Accepted' ? '#4ade80' : '#f87171',
+                                  border: `1px solid ${out.verdict === 'Accepted' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`
+                                }}>
+                                  {out.verdict}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:11, color:'#64748b' }}>
+                              {out.time && <span>⏱ {out.time}</span>}
+                              {out.memory && out.memory !== 'N/A' && <span>💾 {out.memory}</span>}
+                              {out.engine && <span style={{ color:'#818cf8' }}>☁ {out.engine}</span>}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const text = [out.stdout, out.stderr].filter(Boolean).join('\n');
+                                  navigator.clipboard.writeText(text);
+                                  toast.success('Console output copied!');
+                                }}
+                                style={{ display:'flex', alignItems:'center', gap:4, background:'transparent', border:'1px solid #334155', borderRadius:6, padding:'2px 7px', color:'#94a3b8', fontSize:10, cursor:'pointer' }}
+                              >
+                                <Copy size={10} /> Copy
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setRunOutputs(m => ({ ...m, [q.id]: null }))}
+                                style={{ background:'transparent', border:'none', color:'#64748b', fontSize:11, cursor:'pointer' }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Stdout Output */}
+                          {out.stdout && (
+                            <div style={{ marginBottom: out.stderr ? 12 : 0 }}>
+                              <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', marginBottom:4 }}>Standard Output:</div>
+                              <pre style={{ margin:0, padding:12, background:'#020617', borderRadius:8, fontSize:12, color:'#4ade80', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:200, overflowY:'auto' }}>
+                                {out.stdout}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* Stderr Output */}
+                          {out.stderr && (
+                            <div>
+                              <div style={{ fontSize:11, fontWeight:700, color:'#f87171', marginBottom:4 }}>Error / Compiler Output:</div>
+                              <pre style={{ margin:0, padding:12, background:'#020617', borderRadius:8, fontSize:12, color:'#f87171', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", maxHeight:200, overflowY:'auto' }}>
+                                {out.stderr}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* Neither */}
+                          {!out.stdout && !out.stderr && (
+                            <p style={{ margin:0, fontSize:12, color:'#64748b', fontStyle:'italic' }}>
+                              Program executed cleanly with no output.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Navigation & Submit Bar */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:28, gap:12, flexWrap:'wrap' }}>
+                  <div style={{ display:'flex', gap:10 }}>
+                    <button
+                      onClick={() => setCurrent(c => Math.max(0, c - 1))}
+                      disabled={current === 0}
+                      style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'transparent', border:'1px solid var(--border)', borderRadius:9, color:current === 0 ? C.gray : C.white, fontSize:13, cursor:current === 0 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                    >
+                      <ChevronLeft size={16}/> Previous
+                    </button>
+                    <button
+                      onClick={handleClearAnswer}
+                      style={{ padding:'10px 16px', background:'transparent', border:`1px solid ${C.red}33`, borderRadius:9, color:C.red, fontSize:12, cursor:'pointer', fontFamily:"'Sora',sans-serif" }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    {/* Submit & Next Button */}
+                    <button
+                      onClick={handleSubmitAndNext}
+                      style={{
+                        display:'flex',
+                        alignItems:'center',
+                        gap:8,
+                        padding:'11px 22px',
+                        background:'linear-gradient(135deg, #16a34a, #15803d)',
+                        border:'none',
+                        borderRadius:9,
+                        color:'#ffffff',
+                        fontSize:13,
+                        fontWeight:700,
+                        cursor:'pointer',
+                        fontFamily:"'Sora',sans-serif",
+                        boxShadow:'0 2px 10px rgba(22,163,74,0.3)',
+                        transition:'all .15s'
+                      }}
+                    >
+                      <Check size={16}/> {current === questions.length - 1 ? 'Submit & Review' : 'Submit & Next'}
+                    </button>
+
+                    {/* Skip / Next Button */}
+                    <button
+                      onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
+                      disabled={current === questions.length - 1}
+                      style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 18px', background:'var(--bg-card-high)', border:'1px solid var(--border)', borderRadius:9, color:current === questions.length - 1 ? C.gray : C.white, fontSize:13, fontWeight:600, cursor:current === questions.length - 1 ? 'not-allowed' : 'pointer', fontFamily:"'Sora',sans-serif" }}
+                    >
+                      Next <ChevronRight size={15}/>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -789,7 +1182,7 @@ export default function MockOA() {
           </p>
           {(result.questions || []).map((q, i) => {
             const userAns = answers[q.id];
-            const isText = q.type === 'text';
+            const isText = q.type !== 'mcq';
             const correctIdx = q.correct_index !== undefined ? q.correct_index : q.correct_answer !== undefined ? q.correct_answer : q.ans;
             const scored = result.scoredAnswers?.[q.id];
             const isCorrect = isText ? !!(userAns && userAns.trim().length > 10) : parseInt(userAns) === correctIdx;
