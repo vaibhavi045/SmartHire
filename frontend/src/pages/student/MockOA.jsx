@@ -45,38 +45,74 @@ const STARTER_BOILERPLATES = {
 // ── Format Question Description to Rich HTML ─────────────────────────────
 function formatMarkdown(md) {
   if (!md) return '';
-  let out = String(md)
-    // LaTeX math symbols
-    .replace(/\\leq/g, '≤')
-    .replace(/\\geq/g, '≥')
-    .replace(/\\neq/g, '≠')
-    .replace(/\\times/g, '×')
-    .replace(/\\cdot/g, '·')
-    .replace(/\\dots/g, '...')
-    .replace(/\$10\^(\d+)\$/g, '10^$1')
-    .replace(/\$([^$\n]+)\$/g, '$1')
-    // Markdown images
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />')
-    // Ensure existing <img> tags are responsive
-    .replace(/<img\s+([^>]*?)>/gi, (m, attrs) => {
-      return `<img ${attrs} style="max-width:100%;border-radius:8px;margin:8px 0;" />`;
-    })
-    // Headings
-    .replace(/^####\s+(.*$)/gim, '<h5 style="margin:14px 0 6px;font-size:14px;color:#f8fafc;font-weight:700;">$1</h5>')
-    .replace(/^###\s+(.*$)/gim, '<h4 style="margin:16px 0 8px;font-size:15px;color:#f8fafc;font-weight:700;">$1</h4>')
-    .replace(/^##\s+(.*$)/gim, '<h3 style="margin:18px 0 10px;font-size:16px;color:#f8fafc;font-weight:800;">$1</h3>')
-    // Bold & Italics
-    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong style="color:#ffffff;font-weight:800;"><em>$1</em></strong>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#ffffff;font-weight:700;">$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em style="color:#e2e8f0;">$1</em>')
-    // Inline code
-    .replace(/`([^`\n]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:5px;color:#38bdf8;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12.5px;">$1</code>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;">$1</a>')
-    // Blockquotes
-    .replace(/^>\s+(.*$)/gim, '<blockquote style="border-left:3px solid #6366f1;padding:8px 14px;margin:10px 0;background:rgba(99,102,241,0.08);border-radius:0 8px 8px 0;color:#cbd5e1;font-size:13px;">$1</blockquote>');
+  let out = String(md);
 
-  // Handle tables
+  // 1. Fenced code blocks ```...```
+  out = out.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+    return `<div style="margin:12px 0;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:var(--bg-base);"><div style="padding:12px 14px;font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;color:var(--text-primary);white-space:pre-wrap;line-height:1.55;font-weight:500;">${code.trim()}</div></div>`;
+  });
+
+  // 2. LaTeX formatting & symbols
+  out = out
+    // \textbf{...} -> <strong>...</strong>
+    .replace(/\\textbf\{([^}]+)\}/g, '<strong style="color:var(--text-primary);font-weight:700;">$1</strong>')
+    // \textit{...} -> <em>...</em>
+    .replace(/\\textit\{([^}]+)\}/g, '<em style="color:var(--text-primary);font-style:italic;">$1</em>')
+    // \text{...} -> ...
+    .replace(/\\text\{([^}]+)\}/g, '$1')
+    // \texttt{...} -> <code>...</code>
+    .replace(/\\texttt\{([^}]+)\}/g, '<code style="background:rgba(125,125,125,0.12);padding:2px 6px;border-radius:5px;color:#4f46e5;font-family:\'JetBrains Mono\',monospace;font-size:12.5px;">$1</code>')
+    // \rm{...} -> ...
+    .replace(/\\rm\{([^}]+)\}/g, '$1')
+    // Escaped spaces: "\ " -> " "
+    .replace(/\\\s+/g, ' ')
+    // Subscripts: a_1 -> a₁ or a<sub>1</sub>, a_N -> a<sub>N</sub>
+    .replace(/([a-zA-Z0-9])_\{([^}]+)\}/g, '$1<sub>$2</sub>')
+    .replace(/([a-zA-Z0-9])_([0-9a-zA-Z]+)/g, '$1<sub>$2</sub>')
+    .replace(/([a-zA-Z0-9])\^\{([^}]+)\}/g, '$1<sup>$2</sup>')
+    .replace(/([a-zA-Z0-9])\^([0-9a-zA-Z]+)/g, '$1<sup>$2</sup>')
+    // LaTeX math symbols
+    .replace(/\\leq\b|\\le\b/g, '≤')
+    .replace(/\\geq\b|\\ge\b/g, '≥')
+    .replace(/\\neq\b|\\ne\b/g, '≠')
+    .replace(/\\times\b/g, '×')
+    .replace(/\\cdot\b/g, '·')
+    .replace(/\\dots\b|\\ldots\b|\\cdots\b/g, '...')
+    .replace(/\\lt\b/g, '<')
+    .replace(/\\gt\b/g, '>')
+    // Inline math $...$
+    .replace(/\$10\^(\d+)\$/g, '10<sup>$1</sup>')
+    .replace(/\$([^$\n]+)\$/g, '<span style="font-family:\'JetBrains Mono\',Consolas,monospace;font-weight:600;color:var(--text-primary);">$1</span>');
+
+  // 3. Section Titles (Input Format, Output Format, Constraints, etc.)
+  out = out.replace(/^(Input Format|Output Format|Constraints|Note:|Notes:|Explanation|Sample Input|Sample Output):?/gim, '<h4 style="margin:16px 0 8px;font-size:13.5px;color:var(--text-primary);font-weight:800;letter-spacing:0.04em;text-transform:uppercase;">$1</h4>');
+
+  // 4. Markdown images
+  out = out.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:10px 0;display:block;" />');
+  out = out.replace(/<img\s+([^>]*?)>/gi, (m, attrs) => `<img ${attrs} style="max-width:100%;border-radius:8px;margin:8px 0;" />`);
+
+  // 5. Headings
+  out = out
+    .replace(/^####\s+(.*$)/gim, '<h5 style="margin:14px 0 6px;font-size:14px;color:var(--text-primary);font-weight:700;">$1</h5>')
+    .replace(/^###\s+(.*$)/gim, '<h4 style="margin:16px 0 8px;font-size:15px;color:var(--text-primary);font-weight:700;">$1</h4>')
+    .replace(/^##\s+(.*$)/gim, '<h3 style="margin:18px 0 10px;font-size:16px;color:var(--text-primary);font-weight:800;">$1</h3>');
+
+  // 6. Bold & Italics
+  out = out
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong style="color:var(--text-primary);font-weight:800;"><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text-primary);font-weight:700;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em style="color:var(--text-primary);font-style:italic;">$1</em>');
+
+  // 7. Inline code
+  out = out.replace(/`([^`\n]+)`/g, '<code style="background:rgba(125,125,125,0.12);padding:2px 6px;border-radius:5px;color:#0284c7;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12.5px;font-weight:600;">$1</code>');
+
+  // 8. Links
+  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;">$1</a>');
+
+  // 9. Blockquotes
+  out = out.replace(/^>\s+(.*$)/gim, '<blockquote style="border-left:3px solid #6366f1;padding:8px 14px;margin:10px 0;background:rgba(99,102,241,0.08);border-radius:0 8px 8px 0;color:var(--text-primary);font-size:13.5px;">$1</blockquote>');
+
+  // 10. Tables
   const lines = out.split('\n');
   const processed = [];
   let inTable = false;
@@ -85,18 +121,18 @@ function formatMarkdown(md) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('|') && line.endsWith('|')) {
-      if (line.includes('---')) continue; // separator row
+      if (line.includes('---')) continue;
       const cells = line.split('|').slice(1, -1).map(c => c.trim());
       tableRows.push(cells);
       inTable = true;
     } else {
       if (inTable && tableRows.length > 0) {
-        let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #334155;">';
+        let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--border);">';
         tableRows.forEach((row, rIdx) => {
-          tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(255,255,255,0.05)' : 'transparent'};border-bottom:1px solid #334155;">`;
+          tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(125,125,125,0.08)' : 'transparent'};border-bottom:1px solid var(--border);">`;
           row.forEach(cell => {
             const tag = rIdx === 0 ? 'th' : 'td';
-            tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid #334155;color:${rIdx === 0 ? '#f8fafc' : '#cbd5e1'};font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
+            tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid var(--border);color:var(--text-primary);font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
           });
           tableHtml += '</tr>';
         });
@@ -110,12 +146,12 @@ function formatMarkdown(md) {
   }
 
   if (inTable && tableRows.length > 0) {
-    let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #334155;">';
+    let tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--border);">';
     tableRows.forEach((row, rIdx) => {
-      tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(255,255,255,0.05)' : 'transparent'};border-bottom:1px solid #334155;">`;
+      tableHtml += `<tr style="background:${rIdx === 0 ? 'rgba(125,125,125,0.08)' : 'transparent'};border-bottom:1px solid var(--border);">`;
       row.forEach(cell => {
         const tag = rIdx === 0 ? 'th' : 'td';
-        tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid #334155;color:${rIdx === 0 ? '#f8fafc' : '#cbd5e1'};font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
+        tableHtml += `<${tag} style="padding:8px 12px;text-align:left;border-right:1px solid var(--border);color:var(--text-primary);font-weight:${rIdx === 0 ? '700' : '400'};">${cell}</${tag}>`;
       });
       tableHtml += '</tr>';
     });
@@ -125,17 +161,17 @@ function formatMarkdown(md) {
 
   out = processed.join('\n');
 
-  // Convert list items
-  out = out.replace(/^[•\-*]\s+(.*$)/gim, '<div style="display:flex;gap:8px;margin-bottom:6px;"><span style="color:#6366f1;font-weight:700;">•</span><div style="flex:1;">$1</div></div>');
+  // 11. Convert list items
+  out = out.replace(/^[•\-*]\s+(.*$)/gim, '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:baseline;"><span style="color:#6366f1;font-weight:700;font-size:14px;">•</span><div style="flex:1;color:var(--text-primary);line-height:1.65;font-size:13.5px;">$1</div></div>');
 
-  // Convert double newlines to paragraph spacing
+  // 12. Convert double newlines to paragraph spacing
   out = out.split('\n\n').map(p => {
     const trimmed = p.trim();
     if (!trimmed) return '';
-    if (trimmed.startsWith('<h') || trimmed.startsWith('<div') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<table')) {
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<div') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<table') || trimmed.startsWith('<pre')) {
       return trimmed;
     }
-    return `<p style="margin:0 0 10px;line-height:1.7;color:#cbd5e1;">${trimmed.replace(/\n/g, '<br/>')}</p>`;
+    return `<p style="margin:0 0 12px;line-height:1.75;color:var(--text-primary);font-size:14px;">${trimmed.replace(/\n/g, '<br/>')}</p>`;
   }).join('');
 
   return out;
@@ -220,6 +256,10 @@ export default function MockOA() {
   // Proctoring: violations accumulate here for the whole attempt.
   const proctorRef = useRef([]);
   const [violationCount, setViolationCount] = useState(0);
+
+  // Split Workspace & Palette Layout sizing controls
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [codingSplit, setCodingSplit] = useState('wide'); // 'balanced' (42%), 'wide' (32%), 'focus' (24%)
 
   // DB-fetched company-uploaded tests
   const [dbTests,     setDbTests]     = useState([]);
@@ -741,46 +781,107 @@ export default function MockOA() {
 
         <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
 
-          {/* Question palette */}
+          {/* Question palette (Collapsible for maximizing coding workspace) */}
           <div
             className="no-select-pane"
             onSelectStart={(e) => { e.preventDefault(); return false; }}
             onContextMenu={(e) => { e.preventDefault(); return false; }}
-            style={{ width:220, background:'var(--bg-input)', borderRight:'1px solid var(--border)', padding:16, overflowY:'auto', flexShrink:0, userSelect:'none', WebkitUserSelect:'none' }}
+            style={{
+              width: paletteOpen ? 210 : 44,
+              background: 'var(--bg-input)',
+              borderRight: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              flexShrink: 0,
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              transition: 'width 0.2s ease',
+              overflow: 'hidden'
+            }}
           >
-            <p style={{ margin:'0 0 12px', fontSize:11, fontWeight:700, color:C.gray, textTransform:'uppercase', letterSpacing:'0.07em' }}>Question Palette</p>
-            {sections.map(sec => {
-              const sqs = questions.filter(q => q.section === sec);
-              return (
-                <div key={sec} style={{ marginBottom:16 }}>
-                  <p style={{ margin:'0 0 6px', fontSize:10, color:C.gray, fontWeight:600, letterSpacing:'0.05em' }}>{sec}</p>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                    {sqs.map(pq => {
-                      const globalIdx = questions.findIndex(x => x.id === pq.id);
-                      const isAns = submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0);
-                      const isFl  = flagged.has(pq.id);
-                      const isCur = globalIdx === current;
-                      const bgc   = isCur ? C.cyan : isFl ? C.amber : isAns ? C.green : 'var(--bg-card-high)';
-                      return (
-                        <button key={pq.id} onClick={() => setCurrent(globalIdx)}
-                          style={{ width:32, height:32, borderRadius:6, background:bgc, border:`1px solid ${isCur?C.cyan:isAns?C.green:isFl?C.amber:'var(--border)'}`, color:isCur||isAns||isFl?'#ffffff':C.light, fontSize:11, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          {globalIdx+1}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-            {/* Legend */}
-            <div style={{ marginTop:16, borderTop:'1px solid var(--border)', paddingTop:12 }}>
-              {[{c:C.green,l:'Answered'},{c:C.amber,l:'Flagged'},{c:C.cyan,l:'Current'},{c:'var(--bg-card-high)',l:'Not visited'}].map(x=>(
-                <div key={x.l} style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
-                  <div style={{ width:12, height:12, borderRadius:3, background:x.c }}/>
-                  <span style={{ fontSize:10, color:C.gray }}>{x.l}</span>
-                </div>
-              ))}
+            {/* Header with collapse/expand toggle */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: paletteOpen ? 'space-between' : 'center',
+              padding: paletteOpen ? '12px 14px' : '12px 0',
+              borderBottom: '1px solid var(--border)',
+              flexShrink: 0
+            }}>
+              {paletteOpen && (
+                <span style={{ fontSize:11, fontWeight:800, color:C.gray, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+                  Question Palette
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(o => !o)}
+                title={paletteOpen ? "Collapse palette for more coding space" : "Expand question palette"}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  padding: 4,
+                  cursor: 'pointer',
+                  color: C.gray,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {paletteOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
+              </button>
             </div>
+
+            {paletteOpen ? (
+              <div style={{ padding: 14, overflowY: 'auto', flex: 1 }}>
+                {sections.map(sec => {
+                  const sqs = questions.filter(q => q.section === sec);
+                  return (
+                    <div key={sec} style={{ marginBottom:16 }}>
+                      <p style={{ margin:'0 0 6px', fontSize:10, color:C.gray, fontWeight:600, letterSpacing:'0.05em' }}>{sec}</p>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {sqs.map(pq => {
+                          const globalIdx = questions.findIndex(x => x.id === pq.id);
+                          const isAns = submittedQuestions.has(pq.id) || (answers[pq.id] !== undefined && answers[pq.id] !== '' && String(answers[pq.id]).trim().length > 0);
+                          const isFl  = flagged.has(pq.id);
+                          const isCur = globalIdx === current;
+                          const bgc   = isCur ? C.cyan : isFl ? C.amber : isAns ? C.green : 'var(--bg-card-high)';
+                          return (
+                            <button key={pq.id} onClick={() => setCurrent(globalIdx)}
+                              style={{ width:32, height:32, borderRadius:6, background:bgc, border:`1px solid ${isCur?C.cyan:isAns?C.green:isFl?C.amber:'var(--border)'}`, color:isCur||isAns||isFl?'#ffffff':C.light, fontSize:11, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              {globalIdx+1}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Legend */}
+                <div style={{ marginTop:16, borderTop:'1px solid var(--border)', paddingTop:12 }}>
+                  {[{c:C.green,l:'Answered'},{c:C.amber,l:'Flagged'},{c:C.cyan,l:'Current'},{c:'var(--bg-card-high)',l:'Not visited'}].map(x=>(
+                    <div key={x.l} style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
+                      <div style={{ width:12, height:12, borderRadius:3, background:x.c }}/>
+                      <span style={{ fontSize:10, color:C.gray }}>{x.l}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'14px 0', gap:10 }}>
+                <span style={{ fontSize:11, fontWeight:800, color:C.cyan }}>
+                  {current + 1}/{questions.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPaletteOpen(true)}
+                  style={{ background:'transparent', border:'none', color:C.gray, fontSize:10, fontWeight:700, cursor:'pointer', writingMode:'vertical-rl', transform:'rotate(180deg)', padding:'8px 0', letterSpacing:'0.08em' }}
+                >
+                  PALETTE
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Main Assessment Split Workspace (Question on Left, Coding/Options on Right) */}
@@ -823,8 +924,9 @@ export default function MockOA() {
                   onDragStart={(e) => { e.preventDefault(); return false; }}
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); return false; }}
                   style={{
-                    width: q.type === 'mcq' ? '50%' : '48%',
-                    minWidth: 320,
+                    width: q.type === 'mcq' ? '50%' : codingSplit === 'focus' ? '24%' : codingSplit === 'wide' ? '32%' : '42%',
+                    minWidth: q.type === 'mcq' ? 320 : codingSplit === 'focus' ? 240 : 280,
+                    maxWidth: q.type === 'mcq' ? undefined : codingSplit === 'focus' ? 360 : codingSplit === 'wide' ? 460 : 560,
                     borderRight: '1px solid var(--border)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -868,7 +970,7 @@ export default function MockOA() {
                   {/* Scrollable Problem Statement & Details */}
                   <div style={{ flex:1, overflowY:'auto', padding:'20px 24px 32px' }}>
                     {/* Problem Title */}
-                    <h2 style={{ margin:'0 0 16px', fontSize:18, fontWeight:800, color:C.white, fontFamily:"'Sora',sans-serif", lineHeight:1.4 }}>
+                    <h2 style={{ margin:'0 0 16px', fontSize:19, fontWeight:800, color:'var(--text-primary)', fontFamily:"'Sora',sans-serif", lineHeight:1.4 }}>
                       {q.text}
                     </h2>
 
@@ -877,7 +979,7 @@ export default function MockOA() {
                       <div
                         style={{
                           fontSize:14,
-                          color:'var(--text-secondary)',
+                          color:'var(--text-primary)',
                           lineHeight:1.75,
                           fontFamily:"'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
                           background:'var(--bg-input)',
@@ -898,7 +1000,7 @@ export default function MockOA() {
                             Examples / Test Cases
                           </span>
                         </div>
-                        <pre style={{ margin:0, fontSize:12.5, color:'#38bdf8', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", background:'var(--bg-card)', padding:12, borderRadius:8, border:'1px solid var(--border)', lineHeight:1.5 }}>
+                        <pre style={{ margin:0, fontSize:13, color:'var(--text-primary)', whiteSpace:'pre-wrap', fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace", background:'var(--bg-base)', padding:12, borderRadius:8, border:'1px solid var(--border)', lineHeight:1.55 }}>
                           {q.examples}
                         </pre>
                       </div>
@@ -906,11 +1008,11 @@ export default function MockOA() {
 
                     {/* Constraints Card */}
                     {q.constraints && (
-                      <div style={{ background:'rgba(217,119,6,0.06)', border:'1px solid rgba(217,119,6,0.25)', borderRadius:10, padding:14 }}>
+                      <div style={{ background:'rgba(217,119,6,0.08)', border:'1px solid rgba(217,119,6,0.25)', borderRadius:10, padding:14 }}>
                         <div style={{ fontSize:11, fontWeight:800, color:C.amber, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>
                           Constraints
                         </div>
-                        <p style={{ margin:0, fontSize:12.5, color:C.light, lineHeight:1.6 }}>
+                        <p style={{ margin:0, fontSize:13, color:'var(--text-primary)', lineHeight:1.6, fontWeight:500 }}>
                           {q.constraints}
                         </p>
                       </div>
@@ -974,6 +1076,36 @@ export default function MockOA() {
                             >
                               <RotateCcw size={11} /> Reset
                             </button>
+
+                            {/* Editor Size Preset Toggle */}
+                            <div style={{ display:'flex', alignItems:'center', gap:3, background:'var(--bg-card-high)', padding:'3px 4px', borderRadius:8, border:'1px solid var(--border)' }}>
+                              <span style={{ fontSize:10.5, fontWeight:700, color:C.gray, paddingLeft:4, paddingRight:2 }}>Editor:</span>
+                              {[
+                                { id: 'balanced', label: 'Balanced' },
+                                { id: 'wide', label: 'Wide' },
+                                { id: 'focus', label: 'Max' }
+                              ].map(s => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => setCodingSplit(s.id)}
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: 6,
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    background: codingSplit === s.id ? '#4f46e5' : 'transparent',
+                                    color: codingSplit === s.id ? '#ffffff' : 'var(--text-secondary)',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                  title={`${s.label} editor size`}
+                                >
+                                  {s.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
 
                           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1019,11 +1151,11 @@ export default function MockOA() {
                               background:'transparent',
                               border:'none',
                               padding:'18px 20px',
-                              fontSize:13.5,
+                              fontSize:14.5,
                               color:'#f8fafc',
                               resize:'none',
                               outline:'none',
-                              lineHeight:1.7,
+                              lineHeight:1.75,
                               fontFamily:"'JetBrains Mono', Consolas, Monaco, monospace",
                               boxSizing:'border-box',
                               tabSize:4
@@ -1059,7 +1191,7 @@ export default function MockOA() {
 
                         {/* Execution Output Console */}
                         {out && (
-                          <div style={{ background:'#090d16', borderTop:'1px solid #1e293b', padding:14, flexShrink:0, maxHeight:230, overflowY:'auto' }}>
+                          <div style={{ background:'#090d16', borderTop:'1px solid #1e293b', padding:14, flexShrink:0, maxHeight:190, overflowY:'auto' }}>
                             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, flexWrap:'wrap', gap:8, borderBottom:'1px solid #1e293b', paddingBottom:6 }}>
                               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                                 <Terminal size={14} color="#38bdf8" />
