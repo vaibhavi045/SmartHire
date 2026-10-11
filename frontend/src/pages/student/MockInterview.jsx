@@ -7,7 +7,7 @@ import {
   CheckCircle, Clock, Loader2, MicOff, AlertCircle,
   Volume2, VolumeX, Sparkles, Award, BarChart2, RefreshCw,
   ArrowRight, Edit3, Eye, ChevronDown, ChevronUp,
-  History
+  History, Copy, Target
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -187,108 +187,328 @@ export const INTERVIEW_TRACKS = [
 
 const FILLER_WORDS = ['um', 'uh', 'like', 'you know', 'basically', 'actually', 'literally', 'so uh', 'well uh', 'i mean', 'sort of', 'kind of'];
 
-// ── Speech Analysis Engine ──────────────────────────────────────────────────
-function analyseAnswer(questionObj, answerText, elapsedSeconds = 0) {
-  const text      = (answerText || '').trim();
-  const words     = text.split(/\s+/).filter(Boolean);
-  const wc        = words.length;
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 3);
-  const lower     = text.toLowerCase();
+// ── Advanced Multi-Dimensional Speech & Knowledge Evaluation Engine ────────
+export function evaluateAnswer(questionObj, answerText, elapsedSeconds = 0) {
+  const text  = (answerText || '').trim();
+  const lower = text.toLowerCase();
+  const words = text.split(/\s+/).filter(Boolean);
+  const wc    = words.length;
 
-  // 1. Length score (Sweet spot: 60-140 words)
-  let lengthScore = 0;
-  if      (wc === 0)  lengthScore = 0;
-  else if (wc < 15)   lengthScore = 20;
-  else if (wc < 40)   lengthScore = 50;
-  else if (wc < 60)   lengthScore = 75;
-  else if (wc <= 150) lengthScore = 100;
-  else                lengthScore = Math.max(65, 100 - (wc - 150) * 0.25);
+  // 1. Guard against empty or placeholder response
+  if (wc === 0 || text === '(No response recorded)') {
+    return {
+      score: 0,
+      relevanceScore: 0,
+      contentScore: 0,
+      lengthScore: 0,
+      structureScore: 0,
+      fluencyScore: 0,
+      confidenceScore: 0,
+      wordCount: 0,
+      fillerCount: 0,
+      wpm: 0,
+      conceptsHit: [],
+      conceptsMissed: questionObj?.keywords?.slice(0, 6) || [],
+      critique: 'No response was recorded. Speak or type your response to receive an evaluation.',
+      verdict: 'Skipped / No Answer',
+      verdictColor: RED,
+    };
+  }
 
-  // 2. Relevance score (using question's tailored keywords)
-  const keys    = questionObj?.keywords || [];
-  const matched = keys.filter(k => lower.includes(k.toLowerCase())).length;
-  const relevanceScore = keys.length > 0
-    ? Math.min(100, Math.round((matched / Math.min(keys.length, 5)) * 100))
-    : 60;
+  // 2. Identify evasive / non-substantive responses
+  const isEvasive = /^(i don't know|i do not know|no idea|i have no idea|not sure|i'm not sure|haven't learned|never heard of|cannot answer|can't answer|skip this)/i.test(text) && wc < 18;
+  if (isEvasive) {
+    return {
+      score: 10,
+      relevanceScore: 5,
+      contentScore: 10,
+      lengthScore: 10,
+      structureScore: 10,
+      fluencyScore: 25,
+      confidenceScore: 10,
+      wordCount: wc,
+      fillerCount: 0,
+      wpm: Math.round((wc / Math.max(1, elapsedSeconds)) * 60),
+      conceptsHit: [],
+      conceptsMissed: questionObj?.keywords?.slice(0, 6) || [],
+      critique: 'Response indicated uncertainty without outlining foundational principles or architectural approaches.',
+      verdict: 'Evasive / Incomplete',
+      verdictColor: RED,
+    };
+  }
 
-  // 3. Fluency score & Filler Count
-  const fillerCount = FILLER_WORDS.reduce((n, f) => n + (lower.split(f).length - 1), 0);
-  const fillerRatio = wc > 0 ? fillerCount / wc : 0;
-  const fluencyScore = Math.max(0, Math.round(100 - fillerRatio * 280));
+  // 3. Concept / Keyword Extraction (Hit vs Missed)
+  const allKeywords = questionObj?.keywords || [];
+  const conceptsHit = [];
+  const conceptsMissed = [];
 
-  // 4. Structure score (STAR connectors and intro)
-  const hasIntro      = /^(i |my |the |so |well |to |first|let me|in my|when i)/i.test(text);
-  const hasConnectors = /\b(because|however|therefore|also|additionally|furthermore|finally|in conclusion|overall|for example|specifically|in particular|as a result|ultimately|consequently)\b/i.test(text);
-  const hasSentences  = sentences.length >= 3;
-  const structureScore = Math.round(
-    (hasIntro ? 30 : 0) + (hasConnectors ? 40 : 0) + (hasSentences ? 30 : 0)
-  );
+  allKeywords.forEach(kw => {
+    const kwLower = kw.toLowerCase();
+    const escaped = kwLower.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`\\b${escaped}`, 'i');
+    if (regex.test(lower) || lower.includes(kwLower)) {
+      if (!conceptsHit.includes(kw)) conceptsHit.push(kw);
+    } else {
+      if (!conceptsMissed.includes(kw)) conceptsMissed.push(kw);
+    }
+  });
 
-  // 5. Confidence score
+  const targetConceptCount = Math.min(allKeywords.length, 5);
+  const rawCoverage = targetConceptCount > 0 ? conceptsHit.length / targetConceptCount : 0.4;
+  const coveragePercent = Math.min(100, Math.round(rawCoverage * 100));
+
+  // 4. Content Depth (Word Count & Substantive Length)
+  let depthScore = 0;
+  if      (wc < 10)   depthScore = 15;
+  else if (wc < 25)   depthScore = 35;
+  else if (wc < 50)   depthScore = 65;
+  else if (wc <= 140) depthScore = 95;
+  else if (wc <= 190) depthScore = 100;
+  else                depthScore = Math.max(70, 100 - (wc - 190) * 0.25);
+
+  // 5. Topical Relevance Score
+  let relevanceScore = 0;
+  if (wc < 10) {
+    relevanceScore = Math.min(20, Math.round(coveragePercent * 0.2));
+  } else if (wc < 25) {
+    relevanceScore = Math.min(45, Math.round(coveragePercent * 0.55));
+  } else {
+    relevanceScore = Math.min(100, Math.round(coveragePercent * 0.85 + (depthScore >= 65 ? 15 : 0)));
+  }
+
+  if (conceptsHit.length === 0 && allKeywords.length > 0) {
+    relevanceScore = Math.min(relevanceScore, 20);
+  }
+
+  // 6. Fluency & Verbal Filler Analysis
+  const fillerCount = FILLER_WORDS.reduce((n, f) => {
+    const parts = lower.split(f);
+    return n + (parts.length - 1);
+  }, 0);
+  const fillerRatio = wc > 0 ? (fillerCount / wc) * 100 : 0;
+  let fluencyScore = 0;
+  if (wc < 10) {
+    fluencyScore = 20;
+  } else {
+    fluencyScore = Math.max(15, Math.round(100 - fillerRatio * 15));
+  }
+
+  // 7. Structure & STAR Framework Analysis
+  const hasIntro = /\b(in my|when i|during|for instance|to begin with|firstly|first|at its core|fundamentally|in this case|when working on|my experience|the reason)\b/i.test(lower);
+  const hasAction = /\b(i implemented|i designed|i built|we decided|i chose|specifically|by using|we used|to solve|to address|i configured|i prioritized|i optimized)\b/i.test(lower);
+  const hasImpactOrResult = /\b(as a result|consequently|ultimately|which improved|this reduced|the outcome|in conclusion|finally|this ensured|trade-off|tradeoff|impact)\b/i.test(lower);
+  const hasSentences = (text.split(/[.!?]+/).filter(s => s.trim().length > 3)).length >= 3;
+
+  let structureScore = 20;
+  if (wc >= 15) {
+    if (hasIntro)          structureScore += 25;
+    if (hasAction)         structureScore += 25;
+    if (hasImpactOrResult) structureScore += 20;
+    if (hasSentences)      structureScore += 10;
+  } else {
+    structureScore = 15;
+  }
+  structureScore = Math.min(100, structureScore);
+
+  // 8. Confidence & Assertive Voice
   const uncertainPhrases = ['i think', 'i guess', 'maybe', 'perhaps', 'not sure', "i don't know", 'kind of', 'sort of', 'probably', 'might be', 'i suppose'];
-  const confidentPhrases = ['i have', 'i built', 'i led', 'i designed', 'i implemented', 'i achieved', 'i know', 'i am', 'i will', 'i can', 'i created', 'i managed', 'i developed', 'i ensured'];
+  const confidentPhrases = ['i built', 'i led', 'i designed', 'i implemented', 'i achieved', 'i resolved', 'i engineered', 'i ensured', 'i optimized', 'i verified'];
   const uncertainCount   = uncertainPhrases.reduce((n, p) => n + (lower.includes(p) ? 1 : 0), 0);
   const confidentCount   = confidentPhrases.reduce((n, p) => n + (lower.includes(p) ? 1 : 0), 0);
-  const confidenceScore  = wc === 0 ? 0
-    : Math.min(100, Math.max(0, 50 + confidentCount * 14 - uncertainCount * 12));
 
-  // 6. Words Per Minute (WPM)
+  let confidenceScore = 50;
+  if (wc < 10) {
+    confidenceScore = 15;
+  } else {
+    confidenceScore = Math.min(100, Math.max(20, 55 + confidentCount * 12 - uncertainCount * 10));
+  }
+
+  // 9. Speaking Pace (WPM)
   const effectiveSecs = Math.max(1, elapsedSeconds);
   const wpm = Math.round((wc / effectiveSecs) * 60);
 
+  // 10. Composite Score (Relevance 40%, Depth 25%, Structure 15%, Fluency 10%, Confidence 10%)
+  const qComposite = Math.round(
+    relevanceScore  * 0.40 +
+    depthScore      * 0.25 +
+    structureScore  * 0.15 +
+    fluencyScore    * 0.10 +
+    confidenceScore * 0.10
+  );
+
+  // 11. Dynamic Question-Specific Critique
+  let critique = '';
+  if (qComposite >= 80) {
+    critique = `Excellent answer! Covered ${conceptsHit.length} key concepts with strong logical structure and technical clarity.`;
+  } else if (qComposite >= 65) {
+    if (conceptsMissed.length > 0) {
+      critique = `Solid explanation. To make this answer top-tier, explicitly address: ${conceptsMissed.slice(0, 3).join(', ')}.`;
+    } else {
+      critique = `Good grasp of core concepts. Deepen your response by discussing real-world trade-offs or measurable outcomes.`;
+    }
+  } else if (qComposite >= 45) {
+    if (wc < 30) {
+      critique = `Answer was brief (${wc} words). Aim for 60–100 words with concrete technical mechanisms and trade-offs.`;
+    } else if (conceptsHit.length === 0) {
+      critique = `Spoke well, but missed critical technical concepts like: ${conceptsMissed.slice(0, 3).join(', ')}.`;
+    } else {
+      critique = `Partially answered. Structure with the STAR framework (Situation → Task → Action → Result) and clarify trade-offs.`;
+    }
+  } else {
+    if (wc < 15) {
+      critique = `Insufficient response length (${wc} words). Practice explaining the concepts thoroughly using technical vocabulary.`;
+    } else {
+      critique = `Answer lacked topical alignment with the question. Review the model answer and focus on: ${conceptsMissed.slice(0, 4).join(', ')}.`;
+    }
+  }
+
+  let verdict = 'Needs Work';
+  let verdictColor = RED;
+  if      (qComposite >= 80) { verdict = 'Strong Answer'; verdictColor = GREEN; }
+  else if (qComposite >= 65) { verdict = 'Competent';     verdictColor = CYAN; }
+  else if (qComposite >= 48) { verdict = 'Developing';    verdictColor = AMBER; }
+
   return {
-    lengthScore:     Math.round(lengthScore),
+    score:           qComposite,
     relevanceScore:  Math.round(relevanceScore),
-    fluencyScore:    Math.round(fluencyScore),
+    contentScore:    Math.round(depthScore),
+    lengthScore:     Math.round(depthScore),
     structureScore:  Math.round(structureScore),
+    fluencyScore:    Math.round(fluencyScore),
     confidenceScore: Math.round(confidenceScore),
     wordCount:       wc,
     fillerCount,
     wpm,
+    conceptsHit,
+    conceptsMissed:  conceptsMissed.slice(0, 6),
+    critique,
+    verdict,
+    verdictColor,
   };
 }
 
-function computeFinalScores(transcriptArr, trackQuestions) {
-  if (!transcriptArr || transcriptArr.length === 0)
-    return { overall: 0, content: 0, fluency: 0, confidence: 0, structure: 0, relevance: 0, avgWpm: 0, totalFillers: 0 };
+const analyseAnswer = evaluateAnswer;
 
-  const analyses   = transcriptArr.map((t, idx) => analyseAnswer(trackQuestions[idx], t.answer, t.duration || 45));
+function computeFinalScores(transcriptArr, trackQuestions) {
+  if (!transcriptArr || transcriptArr.length === 0) {
+    return {
+      overall: 0,
+      content: 0,
+      fluency: 0,
+      confidence: 0,
+      structure: 0,
+      relevance: 0,
+      avgWpm: 0,
+      totalFillers: 0,
+      totalWords: 0,
+      readinessVerdict: 'Incomplete / No Submission Recorded',
+      readinessBadge: 'Incomplete',
+      readinessColor: RED,
+      perQuestionAnalyses: [],
+    };
+  }
+
+  const analyses   = transcriptArr.map((t, idx) => evaluateAnswer(trackQuestions[idx], t.answer, t.duration || 45));
   const avg        = key => Math.round(analyses.reduce((s, a) => s + (a[key] || 0), 0) / analyses.length);
-  const content    = Math.round((avg('lengthScore') + avg('relevanceScore')) / 2);
+  const relevance  = avg('relevanceScore');
+  const content    = avg('contentScore');
+  const structure  = avg('structureScore');
   const fluency    = avg('fluencyScore');
   const confidence = avg('confidenceScore');
-  const structure  = avg('structureScore');
-  const relevance  = avg('relevanceScore');
   const avgWpm     = avg('wpm');
   const totalFillers = analyses.reduce((s, a) => s + (a.fillerCount || 0), 0);
-  const overall    = Math.round(relevance * 0.35 + content * 0.25 + confidence * 0.25 + fluency * 0.15);
+  const totalWords   = analyses.reduce((s, a) => s + (a.wordCount || 0), 0);
 
-  return { overall, content, fluency, confidence, structure, relevance, avgWpm, totalFillers };
+  const overall    = Math.round(analyses.reduce((s, a) => s + a.score, 0) / analyses.length);
+
+  let readinessVerdict = 'Needs Significant Preparation — Review Core Concepts & STAR Format';
+  let readinessBadge = 'Needs Development';
+  let readinessColor = RED;
+
+  if (overall >= 80) {
+    readinessVerdict = '🏆 High Industry Readiness — Strong Candidate for Onsite & Placement Rounds';
+    readinessBadge = 'Interview Ready';
+    readinessColor = GREEN;
+  } else if (overall >= 68) {
+    readinessVerdict = '⚡ Solid Foundation — Candidate demonstrates good competency with minor polish required';
+    readinessBadge = 'Placement Qualified';
+    readinessColor = CYAN;
+  } else if (overall >= 50) {
+    readinessVerdict = '🛠️ Developing Candidate — Needs structured STAR practice and deeper technical depth';
+    readinessBadge = 'Needs Polish';
+    readinessColor = AMBER;
+  }
+
+  return {
+    overall,
+    content,
+    fluency,
+    confidence,
+    structure,
+    relevance,
+    avgWpm,
+    totalFillers,
+    totalWords,
+    readinessVerdict,
+    readinessBadge,
+    readinessColor,
+    perQuestionAnalyses: analyses,
+  };
 }
 
-function generateFeedback(scores, transcriptArr) {
+function generateFeedback(scores, transcriptArr, analyses) {
   const strengths = [], improvements = [], tips = [];
 
-  if (scores.relevance  >= 70) strengths.push('High Topical Relevance: You directly targeted the key competencies and technical concepts asked.');
-  if (scores.confidence >= 70) strengths.push('Assertive Voice & Ownership: You frequently used proactive delivery phrases ("I implemented", "I designed").');
-  if (scores.fluency    >= 70) strengths.push('Fluent & Composed Delivery: You spoke smoothly with minimal filler sounds or awkward pauses.');
-  if (scores.structure  >= 70) strengths.push('Structured Responses: Excellent logical flow from setup to actions to measurable impact.');
-  if (scores.content    >= 70) strengths.push('Substantive Depth: Your answers had solid detail without trailing off.');
+  if (scores.relevance >= 70) {
+    strengths.push('Topical Accuracy: Directly targeted core concepts, architectures, and terminology required by the interviewer.');
+  }
+  if (scores.content >= 70) {
+    strengths.push('Substantive Depth: Provided thorough explanations with adequate context and implementation detail.');
+  }
+  if (scores.structure >= 70) {
+    strengths.push('Logical Structure: Effectively framed answers with clear situation, action steps, and measurable outcomes.');
+  }
+  if (scores.fluency >= 75) {
+    strengths.push('Articulate Delivery: Spoke smoothly with minimal filler sounds and disciplined cadence.');
+  }
+  if (scores.confidence >= 70) {
+    strengths.push('Assertive Ownership: Used strong proactive voice ("I implemented", "I designed", "We configured").');
+  }
 
-  if (scores.relevance  < 55)  improvements.push('Answer Alignment: Center your answer around the core problem statement and cite concrete technical keywords.');
-  if (scores.confidence < 55)  improvements.push('Assertiveness: Replace tentative phrases ("I think / maybe") with direct ownership statements ("I delivered / I solved").');
-  if (scores.fluency    < 55)  improvements.push('Filler Reduction: You had filler words (um, uh, like). Practice taking a 1-second silent pause rather than vocalizing filler sounds.');
-  if (scores.structure  < 55)  improvements.push('STAR Framework: Structure your answers using Situation → Task → Action → Result for maximum clarity.');
-  if (scores.content    < 55)  improvements.push('Elaborate with Evidence: Expand your responses to 60–120 words to give the interviewer concrete evidence of your skill.');
+  if (scores.relevance < 60) {
+    improvements.push('Technical Keyword Coverage: Deepen your technical explanations by directly addressing required mechanisms, protocols, and data structures.');
+  }
+  if (scores.content < 60) {
+    improvements.push('Elaborate with Evidence: Answers were on the shorter side. Aim for 60–120 words per response with real-world examples.');
+  }
+  if (scores.structure < 60) {
+    improvements.push('STAR Framework Adoption: Anchor your answers in Situation → Task → Action → Result or Context → Problem → Solution → Trade-off.');
+  }
+  if (scores.fluency < 65) {
+    improvements.push('Reduce Verbal Fillers: You used filler sounds (um, uh, like). Replace them with deliberate 1-second silent pauses.');
+  }
+  if (scores.confidence < 60) {
+    improvements.push('Active Voice & Ownership: Replace hedging words ("I guess / maybe / not sure") with decisive active verbs.');
+  }
 
-  if (scores.avgWpm > 170) tips.push(`Speaking Pace: Your average pace was ${scores.avgWpm} WPM. Try slowing down to 120–150 WPM so the interviewer can absorb key points.`);
-  else if (scores.avgWpm < 105 && scores.avgWpm > 0) tips.push(`Pacing: Your pace was ${scores.avgWpm} WPM. Speak with a bit more cadence and energy to convey enthusiasm.`);
-  else tips.push('Pacing: Your speaking rate of ~120-150 WPM was in the ideal conversational interview range.');
+  if (scores.avgWpm > 165) {
+    tips.push(`Speaking Cadence: Your average pace was ${scores.avgWpm} WPM. Slow down slightly to 125–150 WPM so interviewers can follow technical details.`);
+  } else if (scores.avgWpm < 100 && scores.avgWpm > 0) {
+    tips.push(`Energy & Cadence: Your pace was ${scores.avgWpm} WPM. Speak with a bit more cadence and continuous flow.`);
+  } else if (scores.avgWpm > 0) {
+    tips.push(`Pacing: Your pace (${scores.avgWpm} WPM) was in the ideal conversational interview range (120–160 WPM).`);
+  }
 
-  if (scores.totalFillers > 5) tips.push(`Filler Watch: You used ${scores.totalFillers} filler words across the interview. Pause and breathe before starting a new sentence.`);
+  if (scores.totalFillers > 4) {
+    tips.push(`Filler Word Alert: You spoke ${scores.totalFillers} filler words across the session. Practice silent breathing pauses.`);
+  }
 
-  if (!strengths.length)    strengths.push('Completed all interview questions under proctored simulation conditions.');
-  if (!improvements.length) improvements.push('Maintain this high standard across real-world placement drives.');
+  if (!strengths.length) {
+    strengths.push('Completed session under proctored simulation conditions.');
+  }
+  if (!improvements.length) {
+    improvements.push('Excellent overall performance. Maintain this consistent delivery in real-world corporate rounds.');
+  }
 
   return { strengths, improvements, tips };
 }
@@ -551,8 +771,9 @@ export default function MockInterview() {
   const [ttsMuted,      setTtsMuted]      = useState(false);
 
   // Editing & Fallback
-  const [isManualEdit,  setIsManualEdit]  = useState(false);
-  const [manualText,    setManualText]    = useState('');
+  const [isManualEdit,     setIsManualEdit]     = useState(false);
+  const [manualText,       setManualText]       = useState('');
+  const [showBriefWarning, setShowBriefWarning] = useState(false);
 
   // Proctored Metrics
   const [faceMetrics,   setFaceMetrics]   = useState({ faceDetected: false, expression: 'neutral' });
@@ -738,6 +959,7 @@ export default function MockInterview() {
     setIsActive(true);
     setIsManualEdit(false);
     setManualText('');
+    setShowBriefWarning(false);
     stt.reset();
     stt.start();
     setPhase('interview');
@@ -762,11 +984,17 @@ export default function MockInterview() {
       track: currentTrackObj.title
     };
 
-    const scores = analyseAnswer(currentQObj, answer, Math.max(5, qElapsed));
+    const scores = evaluateAnswer(currentQObj, answer, Math.max(5, qElapsed));
 
     transcriptRef.current = [...transcriptRef.current, entry];
     setTranscript(prev    => [...prev, entry]);
-    setAnswerScores(prev  => [...prev, { ...scores, question: currentQObj.question, answer, tip: currentQObj.tip, modelAnswer: currentQObj.modelAnswer }]);
+    setAnswerScores(prev  => [...prev, {
+      ...scores,
+      question: currentQObj.question,
+      answer,
+      tip: currentQObj.tip,
+      modelAnswer: currentQObj.modelAnswer
+    }]);
 
     // Reset STT & editing states
     stt.reset();
@@ -797,48 +1025,57 @@ export default function MockInterview() {
     const fStr  = faceAvg('stress');
 
     const finalResult = {
-      track:           currentTrackObj.title,
-      overallScore:    speechScores.overall,
-      contentScore:    speechScores.content,
-      fluencyScore:    speechScores.fluency,
-      confidenceScore: speechScores.confidence,
-      structureScore:  speechScores.structure,
-      relevanceScore:  speechScores.relevance,
-      avgWpm:          speechScores.avgWpm,
-      totalFillers:    speechScores.totalFillers,
-      eyeContactScore: fEye !== null ? Math.round(speechScores.confidence * 0.7 + fEye * 0.3) : speechScores.confidence,
-      attentionScore:  fAtt !== null ? Math.round(speechScores.structure  * 0.7 + fAtt * 0.3) : speechScores.structure,
-      stressScore:     fStr !== null ? Math.round((100 - speechScores.fluency) * 0.7 + fStr * 0.3) : Math.max(0, 100 - speechScores.fluency),
-      duration:        elapsed,
-      grade:           getGrade(speechScores.overall),
-      feedback:        generateFeedback(speechScores, finalTranscript),
+      track:               currentTrackObj.title,
+      overallScore:        speechScores.overall,
+      contentScore:        speechScores.content,
+      fluencyScore:        speechScores.fluency,
+      confidenceScore:     speechScores.confidence,
+      structureScore:      speechScores.structure,
+      relevanceScore:      speechScores.relevance,
+      avgWpm:              speechScores.avgWpm,
+      totalFillers:        speechScores.totalFillers,
+      totalWords:          speechScores.totalWords,
+      readinessVerdict:    speechScores.readinessVerdict,
+      readinessBadge:      speechScores.readinessBadge,
+      readinessColor:      speechScores.readinessColor,
+      eyeContactScore:     fEye !== null ? Math.round(speechScores.confidence * 0.7 + fEye * 0.3) : speechScores.confidence,
+      attentionScore:      fAtt !== null ? Math.round(speechScores.structure  * 0.7 + fAtt * 0.3) : speechScores.structure,
+      stressScore:         fStr !== null ? Math.round((100 - speechScores.fluency) * 0.7 + fStr * 0.3) : Math.max(0, 100 - speechScores.fluency),
+      duration:            elapsed,
+      grade:               getGrade(speechScores.overall),
+      feedback:            generateFeedback(speechScores, finalTranscript, speechScores.perQuestionAnalyses),
+      perQuestionAnalyses: speechScores.perQuestionAnalyses,
     };
     setResult(finalResult);
 
     setSaving(true);
     try {
       await interviewAPI.save({
-        track:            currentTrackObj.title,
-        durationSeconds:  elapsed,
-        overallScore:     finalResult.overallScore,
-        eyeContactScore:  finalResult.eyeContactScore,
-        confidenceScore:  finalResult.confidenceScore,
-        attentionScore:   finalResult.attentionScore,
-        stressScore:      finalResult.stressScore,
-        transcript:       finalTranscript,
-        expressionLog:    log.slice(-20),
+        track:               currentTrackObj.title,
+        durationSeconds:     elapsed,
+        overallScore:        finalResult.overallScore,
+        eyeContactScore:     finalResult.eyeContactScore,
+        confidenceScore:     finalResult.confidenceScore,
+        attentionScore:      finalResult.attentionScore,
+        stressScore:         finalResult.stressScore,
+        transcript:          finalTranscript,
+        expressionLog:       log.slice(-20),
+        perQuestionAnalyses: speechScores.perQuestionAnalyses,
+        verdict:             speechScores.readinessVerdict,
         aiFeedback: {
-          track:        currentTrackObj.title,
-          strengths:    finalResult.feedback.strengths,
-          improvements: finalResult.feedback.improvements,
-          tips:         finalResult.feedback.tips,
-          scores:       speechScores,
+          track:               currentTrackObj.title,
+          strengths:           finalResult.feedback.strengths,
+          improvements:        finalResult.feedback.improvements,
+          tips:                finalResult.feedback.tips,
+          scores:              speechScores,
+          readinessVerdict:    speechScores.readinessVerdict,
+          perQuestionAnalyses: speechScores.perQuestionAnalyses,
         },
       });
-      toast.success('Interview session securely saved to history!');
+      toast.success('Interview evaluation securely saved to history!');
     } catch (e) {
       console.error('Save failed:', e);
-      toast.error('Session finished (local review available).');
+      toast.error('Session finished (local evaluation available).');
     }
     setSaving(false);
     stopCamera();
@@ -848,6 +1085,7 @@ export default function MockInterview() {
   const nextQuestion = useCallback(() => {
     saveCurrentAnswer();
     setQElapsed(0);
+    setShowBriefWarning(false);
 
     if (currentQ < questionsList.length - 1) {
       const nextIdx = currentQ + 1;
@@ -860,6 +1098,49 @@ export default function MockInterview() {
     }
   }, [currentQ, finishInterview, questionsList, saveCurrentAnswer, speakQuestion]);
 
+  const handleProceedQuestion = () => {
+    const rawAnswer = isManualEdit
+      ? manualText
+      : (stt.finalRef.current || stt.fullText || manualText);
+    const wc = (rawAnswer || '').trim().split(/\s+/).filter(Boolean).length;
+    if (wc < 15 && !showBriefWarning) {
+      setShowBriefWarning(true);
+      return;
+    }
+    setShowBriefWarning(false);
+    nextQuestion();
+  };
+
+  const copyAssessmentSummary = () => {
+    if (!result) return;
+    const summaryText = `=== SMARTHIRE AI MOCK INTERVIEW ASSESSMENT REPORT ===
+Track: ${result.track}
+Overall Score: ${result.overallScore}/100 (Grade: ${result.grade})
+Readiness Verdict: ${result.readinessVerdict}
+Session Duration: ${fmt(result.duration)} | Total Words Spoken: ${result.totalWords || 0} | Avg Speaking Pace: ${result.avgWpm} WPM
+
+--- COMPETENCY SCORES ---
+• Topical Relevance: ${result.relevanceScore}% (Weight 40%)
+• Content Depth: ${result.contentScore}% (Weight 25%)
+• STAR Structure: ${result.structureScore}% (Weight 15%)
+• Spoken Fluency: ${result.fluencyScore}% (Weight 10%)
+• Confidence & Presence: ${result.confidenceScore}% (Weight 10%)
+• Proctoring Eye Contact: ${result.eyeContactScore}%
+
+--- QUESTION-BY-QUESTION EVALUATION ---
+${(answerScores || []).map((sc, i) => `Q${i + 1}: ${sc.question}
+  Score: ${sc.score !== undefined ? sc.score : sc.relevanceScore}/100 (${sc.verdict || 'Evaluated'})
+  Concepts Covered: ${sc.conceptsHit?.length ? sc.conceptsHit.join(', ') : 'None detected'}
+  Concepts Omitted: ${sc.conceptsMissed?.length ? sc.conceptsMissed.join(', ') : 'None'}
+  Critique: ${sc.critique || 'Evaluated'}
+  Candidate Response: "${sc.answer}"
+`).join('\n')}
+======================================================`;
+
+    navigator.clipboard.writeText(summaryText);
+    toast.success('Assessment report copied to clipboard!');
+  };
+
   const resetAll = () => {
     setPhase('setup');
     setCamReady(false);
@@ -871,6 +1152,7 @@ export default function MockInterview() {
     setQElapsed(0);
     setCurrentQ(0);
     setExpressionLog([]);
+    setShowBriefWarning(false);
     transcriptRef.current = [];
     stt.reset();
     setIsManualEdit(false);
@@ -1069,26 +1351,61 @@ export default function MockInterview() {
                             </div>
                           </div>
 
-                          {/* Expanded Transcript */}
+                          {/* Expanded Transcript & Evaluation Details */}
                           {isExpanded && (
                             <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px', background: 'var(--bg-base)' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: CYAN, textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.05em' }}>
-                                📝 Session Interview Transcript ({s.transcript?.length || 0} Questions Answered)
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: CYAN, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  📝 Session Assessment & Responses ({s.transcript?.length || 0} Questions Answered)
+                                </div>
+                                {s.verdict && (
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: s.overallScore >= 75 ? GREEN : AMBER }}>
+                                    {s.verdict}
+                                  </span>
+                                )}
                               </div>
                               {(!s.transcript || s.transcript.length === 0) ? (
                                 <p style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', margin: 0 }}>No transcript lines recorded for this session.</p>
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                  {s.transcript.map((item, qIdx) => (
-                                    <div key={qIdx} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
-                                      <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                                        Q{qIdx + 1}: {item.question}
-                                      </p>
-                                      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: item.answer === '(No answer recorded)' ? 'italic' : 'normal' }}>
-                                        "{item.answer}"
-                                      </p>
-                                    </div>
-                                  ))}
+                                  {s.transcript.map((item, qIdx) => {
+                                    const analysis = s.perQuestionAnalyses?.[qIdx];
+                                    return (
+                                      <div key={qIdx} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 8 }}>
+                                          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
+                                            Q{qIdx + 1}: {item.question}
+                                          </p>
+                                          {analysis && (
+                                            <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: `${analysis.verdictColor || CYAN}15`, color: analysis.verdictColor || CYAN }}>
+                                              {analysis.score !== undefined ? `${analysis.score}/100` : ''} {analysis.verdict || ''}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: item.answer === '(No response recorded)' ? 'italic' : 'normal' }}>
+                                          "{item.answer}"
+                                        </p>
+
+                                        {analysis?.conceptsHit?.length > 0 && (
+                                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: GREEN, marginRight: 2 }}>Concepts Hit:</span>
+                                            {analysis.conceptsHit.map(c => (
+                                              <span key={c} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,0.1)', color: GREEN }}>
+                                                ✓ {c}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+
+                                        {analysis?.critique && (
+                                          <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                                            💡 {analysis.critique}
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -1408,10 +1725,47 @@ export default function MockInterview() {
                       {currentQObj.question}
                     </h2>
 
-                    <div style={{ background: 'var(--bg-card-high)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+                    <div style={{ background: 'var(--bg-card-high)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
                       <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                         💡 <strong style={{ color: CYAN }}>Interview Strategy Tip:</strong> {currentQObj.tip}
                       </p>
+                    </div>
+
+                    {/* Live Concept Coverage Tracker */}
+                    <div style={{ background: 'var(--bg-card-high)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Target size={13} color={CYAN} /> Target Technical Concepts
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: (liveScores.conceptsHit?.length || 0) > 0 ? GREEN : '#64748b' }}>
+                          {liveScores.conceptsHit?.length || 0} / {Math.min(currentQObj.keywords.length, 6)} detected in speech
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {currentQObj.keywords.slice(0, 8).map(kw => {
+                          const hit = (liveScores.conceptsHit || []).includes(kw);
+                          return (
+                            <span
+                              key={kw}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                background: hit ? 'rgba(22, 163, 74, 0.15)' : 'var(--bg-base)',
+                                border: `1px solid ${hit ? GREEN : 'var(--border)'}`,
+                                color: hit ? GREEN : '#94a3b8',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              {hit ? '✓' : '○'} {kw}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Live Transcription & Dual-Input Box */}
@@ -1473,13 +1827,44 @@ export default function MockInterview() {
                       )}
                     </div>
 
+                    {/* Short Answer Warning Dialog */}
+                    {showBriefWarning && (
+                      <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, background: 'rgba(217,119,6,0.12)', border: `1px solid ${AMBER}60` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: AMBER, fontWeight: 800, fontSize: 13, marginBottom: 4 }}>
+                          <AlertCircle size={16} /> Short Answer Detected ({liveScores.wordCount} words)
+                        </div>
+                        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                          Mock interviews evaluate technical depth, keyword coverage, and structured reasoning. Answers with fewer than 15 words receive low relevance and content scores.
+                        </p>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowBriefWarning(false)}
+                            style={{ ...BTN, background: CYAN, color: '#fff', fontSize: 11, padding: '7px 14px' }}
+                          >
+                            Continue Speaking / Typing
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowBriefWarning(false);
+                              nextQuestion();
+                            }}
+                            style={{ ...BTN, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 11, padding: '7px 14px' }}
+                          >
+                            Submit Anyway
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Next / Submit Button */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 12, color: '#64748b' }}>
-                        {currentQ < questionsList.length - 1 ? 'Answer will be saved to your final report' : 'Final response — session will be evaluated'}
+                        {currentQ < questionsList.length - 1 ? 'Answer will be evaluated in your final assessment' : 'Final response — full evaluation will be generated'}
                       </span>
                       <button
-                        onClick={nextQuestion}
+                        onClick={handleProceedQuestion}
                         style={{
                           ...BTN,
                           background: currentQ < questionsList.length - 1 ? CYAN : GREEN,
@@ -1524,58 +1909,77 @@ export default function MockInterview() {
               SCREEN 3: COMPREHENSIVE PERFORMANCE RESULTS & MODEL ANSWERS
           ───────────────────────────────────────────────────────────── */}
           {phase === 'result' && (
-            <div style={{ maxWidth: 960, margin: '0 auto' }}>
+            <div style={{ maxWidth: 980, margin: '0 auto' }}>
               {/* Header */}
               <div style={{ textAlign: 'center', marginBottom: 24 }}>
                 <p style={{ fontSize: 40, margin: '0 0 6px' }}>
-                  {(result?.overallScore || 0) >= 75 ? '🎉' : (result?.overallScore || 0) >= 50 ? '👍' : '📈'}
+                  {(result?.overallScore || 0) >= 80 ? '🏆' : (result?.overallScore || 0) >= 65 ? '⚡' : (result?.overallScore || 0) >= 45 ? '🛠️' : '📈'}
                 </p>
                 <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                  Interview Assessment Report
+                  Comprehensive Interview Evaluation & Assessment Report
                 </h2>
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  Track: <strong style={{ color: CYAN }}>{result?.track}</strong> · Session Duration: {fmt(result?.duration || 0)}
+                  Track: <strong style={{ color: CYAN }}>{result?.track}</strong> · Duration: {fmt(result?.duration || 0)} · Words Evaluated: <strong>{result?.totalWords || 0}</strong>
                 </p>
               </div>
 
-              {/* Overall Score Banner */}
-              <GlowCard accent={result?.overallScore >= 75 ? GREEN : result?.overallScore >= 50 ? AMBER : RED} padding={24} style={{ marginBottom: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24, alignItems: 'center' }}>
+              {/* Overall Placement Readiness Verdict Banner */}
+              <GlowCard accent={result?.readinessColor || (result?.overallScore >= 75 ? GREEN : AMBER)} padding={24} style={{ marginBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'center' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ width: 120, height: 120, borderRadius: '50%', background: `conic-gradient(${result?.overallScore >= 75 ? GREEN : AMBER} ${(result?.overallScore || 0) * 3.6}deg, var(--bg-card-high) 0)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', boxShadow: `0 0 24px ${result?.overallScore >= 75 ? GREEN : AMBER}33` }}>
-                      <span style={{ fontSize: 32, fontWeight: 900, color: 'var(--text-primary)' }}>{result?.overallScore}</span>
+                    <div style={{ width: 130, height: 130, borderRadius: '50%', background: `conic-gradient(${result?.readinessColor || (result?.overallScore >= 75 ? GREEN : AMBER)} ${(result?.overallScore || 0) * 3.6}deg, var(--bg-card-high) 0)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', boxShadow: `0 0 24px ${result?.readinessColor || GREEN}33` }}>
+                      <span style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)' }}>{result?.overallScore}</span>
                       <span style={{ fontSize: 11, color: '#64748b' }}>/ 100</span>
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Grade: {result?.grade}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Grade: <span style={{ color: result?.readinessColor || GREEN }}>{result?.grade}</span>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: `${result?.readinessColor || GREEN}18`, color: result?.readinessColor || GREEN, marginTop: 4, display: 'inline-block' }}>
+                      {result?.readinessBadge || 'Evaluated'}
+                    </span>
                   </div>
 
-                  {/* 6 Key Competencies Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-                    {[
-                      { l: 'Relevance',    v: result?.relevanceScore,  c: VIOLET, desc: 'Topical accuracy' },
-                      { l: 'Content Depth',v: result?.contentScore,    c: CYAN,   desc: 'Vocabulary & length' },
-                      { l: 'Confidence',   v: result?.confidenceScore, c: GREEN,  desc: 'Assertive phrasing' },
-                      { l: 'Fluency',      v: result?.fluencyScore,    c: AMBER,  desc: 'Minimal filler words' },
-                      { l: 'Structure',    v: result?.structureScore,  c: BLUE,   desc: 'STAR logical flow' },
-                      { l: 'Eye Contact',  v: result?.eyeContactScore, c: TEAL,   desc: 'Camera engagement' },
-                    ].map(m => (
-                      <div key={m.l} style={{ padding: '10px 12px', background: `${m.c}0a`, border: `1px solid ${m.c}25`, borderRadius: 10 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{m.l}</span>
-                          <span style={{ fontSize: 14, fontWeight: 800, color: m.c }}>{m.v}%</span>
+                  <div>
+                    <div style={{ marginBottom: 14 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 2 }}>
+                        Placement Readiness Verdict
+                      </span>
+                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                        {result?.readinessVerdict}
+                      </h3>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Total Words Spoken: <strong>{result?.totalWords || 0}</strong> · Average Pace: <strong>{result?.avgWpm || 0} WPM</strong> · Fillers Detected: <strong>{result?.totalFillers || 0}</strong>
+                      </p>
+                    </div>
+
+                    {/* 6 Key Competencies Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+                      {[
+                        { l: 'Topical Relevance', v: result?.relevanceScore,  c: VIOLET, desc: 'Key concept coverage (40%)' },
+                        { l: 'Content Depth',    v: result?.contentScore,    c: CYAN,   desc: 'Substance & length (25%)' },
+                        { l: 'STAR Structure',   v: result?.structureScore,  c: BLUE,   desc: 'Logical sequencing (15%)' },
+                        { l: 'Spoken Fluency',   v: result?.fluencyScore,    c: GREEN,  desc: 'Filler minimization (10%)' },
+                        { l: 'Confidence',       v: result?.confidenceScore, c: AMBER,  desc: 'Assertive phrasing (10%)' },
+                        { l: 'Eye Contact',      v: result?.eyeContactScore, c: TEAL,   desc: 'Proctoring camera index' },
+                      ].map(m => (
+                        <div key={m.l} style={{ padding: '10px 12px', background: `${m.c}0a`, border: `1px solid ${m.c}25`, borderRadius: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>{m.l}</span>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: m.c }}>{m.v}%</span>
+                          </div>
+                          <div style={{ height: 4, background: 'var(--bg-card-high)', borderRadius: 2, marginBottom: 4 }}>
+                            <div style={{ width: `${Math.min(100, m.v || 0)}%`, height: '100%', background: m.c, borderRadius: 2 }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>{m.desc}</span>
                         </div>
-                        <div style={{ height: 4, background: 'var(--bg-card-high)', borderRadius: 2, marginBottom: 4 }}>
-                          <div style={{ width: `${m.v}%`, height: '100%', background: m.c, borderRadius: 2 }} />
-                        </div>
-                        <span style={{ fontSize: 10, color: '#64748b' }}>{m.desc}</span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </GlowCard>
 
               {/* AI Feedback Cards */}
-              <GlowCard title="AI Speech & Delivery Feedback" accent={CYAN} padding={20} style={{ marginBottom: 20 }}>
+              <GlowCard title="AI Speech & Delivery Coaching" accent={CYAN} padding={20} style={{ marginBottom: 20 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
                     <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 800, color: GREEN, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1617,24 +2021,97 @@ export default function MockInterview() {
 
               {/* Question-by-Question Breakdown with Model Answers */}
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, marginBottom: 24 }}>
-                <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Question-by-Question Review & Ideal Model Answers
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Question-by-Question Deep Evaluation Review
+                    </h3>
+                    <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      Granular breakdown of concepts covered, omitted concepts, and constructive AI critique.
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: CYAN }}>
+                    {answerScores.length} Questions Answered
+                  </span>
+                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {answerScores.map((sc, i) => (
-                    <div key={i} style={{ background: 'var(--bg-card-high)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 10 }}>
-                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', flex: 1 }}>
+                    <div key={i} style={{ background: 'var(--bg-card-high)', border: '1px solid var(--border)', borderRadius: 14, padding: 18 }}>
+                      {/* Question Title & Score Badge */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 }}>
+                        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', flex: 1, lineHeight: 1.5 }}>
                           Q{i + 1}: {sc.question}
                         </h4>
-                        <span style={{ fontSize: 12, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: sc.relevanceScore >= 65 ? 'rgba(22,163,74,0.15)' : 'rgba(217,119,6,0.15)', color: sc.relevanceScore >= 65 ? GREEN : AMBER }}>
-                          {sc.relevanceScore}% Relevance
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 13, fontWeight: 900, padding: '4px 10px', borderRadius: 8, background: `${sc.verdictColor || CYAN}18`, border: `1px solid ${sc.verdictColor || CYAN}40`, color: sc.verdictColor || CYAN }}>
+                            {sc.score !== undefined ? `${sc.score} / 100` : `${sc.relevanceScore}%`} · {sc.verdict || 'Evaluated'}
+                          </span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>Weight: 40% Relevance · 25% Depth</span>
+                        </div>
                       </div>
 
+                      {/* Mini Metric Bars */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 14, background: 'var(--bg-base)', padding: 10, borderRadius: 8, border: '1px solid var(--border)' }}>
+                        <div>
+                          <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Relevance</span>
+                          <strong style={{ fontSize: 13, color: VIOLET }}>{sc.relevanceScore}%</strong>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Content Depth</span>
+                          <strong style={{ fontSize: 13, color: CYAN }}>{sc.contentScore || sc.lengthScore || 0}% ({sc.wordCount} words)</strong>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>STAR Structure</span>
+                          <strong style={{ fontSize: 13, color: BLUE }}>{sc.structureScore}%</strong>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Fluency / Pace</span>
+                          <strong style={{ fontSize: 13, color: GREEN }}>{sc.fluencyScore}% ({sc.wpm} WPM)</strong>
+                        </div>
+                      </div>
+
+                      {/* Concepts Covered vs Missed Badges */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: GREEN, marginRight: 4 }}>Concepts Covered:</span>
+                          {(sc.conceptsHit && sc.conceptsHit.length > 0) ? (
+                            sc.conceptsHit.map(c => (
+                              <span key={c} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(22,163,74,0.15)', border: `1px solid ${GREEN}40`, color: GREEN }}>
+                                ✓ {c}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>No technical keywords detected in this answer</span>
+                          )}
+                        </div>
+
+                        {(sc.conceptsMissed && sc.conceptsMissed.length > 0) && (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: AMBER, marginRight: 4 }}>Key Concepts Omitted:</span>
+                            {sc.conceptsMissed.map(c => (
+                              <span key={c} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: 'rgba(217,119,6,0.1)', border: `1px solid ${AMBER}30`, color: AMBER }}>
+                                ○ {c}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Constructive AI Critique */}
+                      {sc.critique && (
+                        <div style={{ background: 'rgba(79,70,229,0.06)', borderLeft: `3px solid ${sc.verdictColor || CYAN}`, borderRadius: '0 8px 8px 0', padding: '8px 12px', marginBottom: 12 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: sc.verdictColor || CYAN, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>
+                            🎯 AI Evaluation Feedback:
+                          </span>
+                          <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                            {sc.critique}
+                          </p>
+                        </div>
+                      )}
+
                       {/* Student's Transcribed Answer */}
-                      <div style={{ marginBottom: 10, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                      <div style={{ marginBottom: 10, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                           Your Spoken Response ({sc.wordCount} words):
                         </span>
@@ -1645,9 +2122,9 @@ export default function MockInterview() {
 
                       {/* Exemplary Model Answer / STAR Approach */}
                       {sc.modelAnswer && (
-                        <div style={{ background: 'rgba(79,70,229,0.06)', border: `1px solid ${CYAN}25`, borderRadius: 8, padding: 10 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: CYAN, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            💡 Exemplary Approach & STAR Model Guide:
+                        <div style={{ background: 'rgba(16,185,129,0.05)', border: `1px solid ${GREEN}25`, borderRadius: 8, padding: 12 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: GREEN, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                            💡 Exemplary Benchmark & STAR Model Answer:
                           </span>
                           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                             {sc.modelAnswer}
@@ -1660,12 +2137,18 @@ export default function MockInterview() {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button
                   onClick={resetAll}
                   style={{ ...BTN, background: CYAN, color: '#fff', border: 'none', padding: '12px 24px' }}
                 >
                   <RefreshCw size={15} /> Practice Another Track
+                </button>
+                <button
+                  onClick={copyAssessmentSummary}
+                  style={{ ...BTN, background: 'rgba(79,70,229,0.1)', color: CYAN, border: `1px solid ${CYAN}40`, padding: '12px 24px' }}
+                >
+                  <Copy size={15} /> Copy Assessment Summary
                 </button>
                 <button
                   onClick={() => { setActiveTab('history'); setPhase('setup'); }}
@@ -1677,7 +2160,7 @@ export default function MockInterview() {
 
               {saving && (
                 <p style={{ textAlign: 'center', fontSize: 12, color: '#64748b', marginTop: 12 }}>
-                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving session...
+                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving evaluation session...
                 </p>
               )}
             </div>

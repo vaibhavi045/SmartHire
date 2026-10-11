@@ -29,6 +29,8 @@ router.post('/save', auth, roles('student'), async (req, res) => {
     expressionLog,
     aiFeedback,
     track,
+    perQuestionAnalyses,
+    verdict,
   } = req.body;
 
   if (overallScore === undefined || durationSeconds === undefined) {
@@ -40,7 +42,6 @@ router.post('/save', auth, roles('student'), async (req, res) => {
       .from('interview_sessions')
       .insert({
         student_id: req.user.id,
-        // ✅ Removed company_id - column doesn't exist in schema
         duration_seconds: durationSeconds,
         overall_score: overallScore,
         eye_contact_score: eyeContactScore || 0,
@@ -52,6 +53,8 @@ router.post('/save', auth, roles('student'), async (req, res) => {
           transcript: transcript || [],
           expressionLog: expressionLog || [],
           feedback: aiFeedback || {},
+          perQuestionAnalyses: perQuestionAnalyses || aiFeedback?.perQuestionAnalyses || [],
+          verdict: verdict || aiFeedback?.readinessVerdict || '',
         },
       })
       .select()
@@ -111,6 +114,9 @@ router.get('/history', auth, roles('student'), async (req, res) => {
       grade: getGrade(s.overall_score),
       transcriptCount: s.ai_feedback?.transcript?.length || 0,
       transcript: s.ai_feedback?.transcript || [],
+      feedback: s.ai_feedback?.feedback || {},
+      perQuestionAnalyses: s.ai_feedback?.perQuestionAnalyses || [],
+      verdict: s.ai_feedback?.verdict || '',
     }));
 
     res.json({ history });
