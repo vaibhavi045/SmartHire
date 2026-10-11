@@ -36,5 +36,91 @@ router.post('/run', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// POST /api/code/run-tests — execute code against an array of test cases
+router.post('/run-tests', auth, async (req, res) => {
+  const { code, language, testCases } = req.body;
+
+  if (!code || !language) {
+    return res.status(400).json({ error: 'code and language are required' });
+  }
+
+  const cases = Array.isArray(testCases) && testCases.length > 0
+    ? testCases
+    : [{ input: req.body.stdin || '', expected_output: '' }];
+
+  const normalize = (s) => (s || '').replace(/\r\n/g, '\n').split('\n').map(l => l.trimEnd()).join('\n').trim();
+
+  const results = [];
+  let passedCount = 0;
+  let overallVerdict = 'Accepted';
+  let totalTime = '0s';
+
+  for (let i = 0; i < cases.length; i++) {
+    const tc = cases[i];
+    const tcInput = tc.input || '';
+    const expected = normalize(tc.expected_output);
+
+    try {
+      const execRes = await execute(code, language, tcInput);
+      const actual = normalize(execRes.stdout);
+
+      let tcPassed = false;
+      let tcVerdict = execRes.verdict;
+
+      if (execRes.verdict === 'Accepted') {
+        if (!expected) {
+          tcPassed = true;
+          tcVerdict = 'Executed';
+        } else if (actual === expected) {
+          tcPassed = true;
+          tcVerdict = 'Passed';
+        } else {
+          tcPassed = false;
+          tcVerdict = 'Wrong Answer';
+          if (overallVerdict === 'Accepted') overallVerdict = 'Wrong Answer';
+        }
+      } else {
+        tcPassed = false;
+        overallVerdict = execRes.verdict;
+      }
+
+      if (tcPassed) passedCount++;
+
+      results.push({
+        testCase: i + 1,
+        passed: tcPassed,
+        verdict: tcVerdict,
+        input: tcInput,
+        expected,
+        actual,
+        stderr: execRes.stderr || '',
+        time: execRes.time || '0.05s',
+      });
+      totalTime = execRes.time || totalTime;
+    } catch (err) {
+      results.push({
+        testCase: i + 1,
+        passed: false,
+        verdict: 'Execution Error',
+        input: tcInput,
+        expected,
+        actual: '',
+        stderr: err.message,
+      });
+      overallVerdict = 'Execution Error';
+    }
+  }
+
+  const allPassed = passedCount === cases.length && cases.length > 0;
+  res.json({
+    verdict: allPassed ? 'Accepted' : overallVerdict,
+    passedCount,
+    totalCount: cases.length,
+    allPassed,
+    results,
+    time: totalTime,
+    engine: 'SmartHire Code Engine',
+  });
+});
 
 module.exports = router;
