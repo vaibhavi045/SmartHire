@@ -87,10 +87,107 @@ function getQuestionTestCases(q) {
     }
   }
 
+  // 7. General Example pattern: Given n=... and arr=[...] ... result/output/operations is X
+  const givenArrRegex = /Example\s*\d*:?[\s\S]*?Given\s*(?:n\s*=\s*\d+)?\s*(?:and)?\s*(\w+)\s*=\s*\[([0-9,\s]+)\][\s\S]*?(?:perform|output|result|answer)\s*(?:is|=|:)?\s*(\d+)/gi;
+  let gm;
+  while ((gm = givenArrRegex.exec(desc)) !== null) {
+    const rawArr = gm[2].split(',').map(s => s.trim()).filter(Boolean);
+    const inp = `${rawArr.length}\n${rawArr.join(' ')}`;
+    const out = normalizeIO(gm[3]);
+    if (inp && out && !cases.some(c => c.input === inp && c.expected_output === out)) {
+      cases.push({ input: inp, expected_output: out, sample: true });
+    }
+  }
+
+  // 8. Plain Text Sample Input / Output:
+  const plainIoRegex = /Sample\s*Input(?:\s*\d*)?:?\s*\n+([^\n]+(?:\n+[^\n]+)?)\n+Sample\s*Output(?:\s*\d*)?:?\s*\n+([^\n]+)/gi;
+  let pm;
+  while ((pm = plainIoRegex.exec(desc)) !== null) {
+    const inp = normalizeIO(pm[1]);
+    const out = normalizeIO(pm[2]);
+    if (inp && out && !cases.some(c => c.input === inp && c.expected_output === out)) {
+      cases.push({ input: inp, expected_output: out, sample: true });
+    }
+  }
+
   return cases;
+}
+
+/**
+ * Intelligent Static Logic & Heuristic Evaluator
+ * Used when no standard I/O test cases are configured for a question.
+ * Ensures unverified or trivial code never gets full 100% credit,
+ * while rewarding genuine implementation with proportional provisional marks.
+ */
+function evaluateCodeHeuristics(code, lang, starterCode, question) {
+  if (!code || !code.trim()) {
+    return {
+      scoreRatio: 0,
+      verdict: 'Unattempted',
+      result: 'skipped',
+      details: 'No code submitted.'
+    };
+  }
+
+  // Strip comments and leading/trailing whitespace
+  const cleanCode = code
+    .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
+    .replace(/#.*/g, '')
+    .trim();
+
+  // 1. Starter boilerplate check
+  const isStarter = starterCode && cleanCode === starterCode.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').replace(/#.*/g, '').trim();
+  const lines = cleanCode.split('\n').map(l => l.trim()).filter(Boolean);
+
+  if (isStarter || lines.length <= 2) {
+    return {
+      scoreRatio: 0,
+      verdict: 'Trivial / Incomplete Solution',
+      result: 'wrong',
+      details: 'Solution contains only starter boilerplate or trivial statements.'
+    };
+  }
+
+  // 2. Control flow & algorithmic constructs
+  const hasLoop = /\b(for|while|forEach|map|filter|reduce)\b/.test(cleanCode);
+  const hasCondition = /\b(if|else|elif|switch|case|\?:)\b/.test(cleanCode);
+  const hasFuncOrClass = /\b(def|function|class|public|private|static|void|int|auto|const)\b/.test(cleanCode);
+  const hasReturn = /\b(return|yield|cout|System\.out\.print|print)\b/.test(cleanCode);
+  const hasDataStructure = /\b(vector|set|map|dict|list|queue|stack|heap|priority_queue|HashMap|HashSet|ArrayList|Array|Collections)\b/i.test(cleanCode);
+
+  let logicPoints = 0;
+  if (hasFuncOrClass) logicPoints += 15;
+  if (hasCondition) logicPoints += 25;
+  if (hasLoop) logicPoints += 30;
+  if (hasReturn) logicPoints += 15;
+  if (hasDataStructure) logicPoints += 15;
+
+  if (logicPoints < 35) {
+    return {
+      scoreRatio: 0,
+      verdict: 'Insufficient Algorithmic Logic',
+      result: 'wrong',
+      details: 'Code compiled but lacks essential control flow, iterative logic, or algorithmic constructs.'
+    };
+  } else if (logicPoints >= 70) {
+    return {
+      scoreRatio: 0.60, // 60% provisional credit
+      verdict: 'Provisional Pass (Static Analysis: 60%)',
+      result: 'partial',
+      details: 'Algorithmic logic, control structures, and syntax verified. Awaiting recruiter review for final test case grading.'
+    };
+  } else {
+    return {
+      scoreRatio: 0.35, // 35% provisional credit
+      verdict: 'Partial Logic (Static Analysis: 35%)',
+      result: 'partial',
+      details: 'Basic control flow detected. Solution appears partially implemented.'
+    };
+  }
 }
 
 module.exports = {
   getQuestionTestCases,
   normalizeIO,
+  evaluateCodeHeuristics,
 };

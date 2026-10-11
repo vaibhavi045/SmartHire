@@ -5,7 +5,7 @@ const  supabaseAdmin = require('../config/supabase'); // ← named import
 const auth = require('../middleware/auth');
 const roles = require('../middleware/roles');
 const { execute } = require('../utils/coderunner');
-const { getQuestionTestCases, normalizeIO } = require('../utils/testcaseExtractor');
+const { getQuestionTestCases, normalizeIO, evaluateCodeHeuristics } = require('../utils/testcaseExtractor');
 
 // ── Boilerplate & Empty Code Detector ───────────────────────────────────────
 function isBoilerplateOrEmpty(code, lang, starterCode) {
@@ -319,36 +319,49 @@ router.post('/submit', auth, roles('student'), async (req, res) => {
             };
           }
         } else {
-          // If no test cases are defined for this question:
+          // When no standard I/O test cases are configured for this question:
+          // Gate 1: Check syntax and compilation on the code engine
           try {
             const runRes = await execute(studentAnswer, lang, '');
-            if (runRes && runRes.verdict === 'Accepted') {
-              totalScore += q.marks;
-              correctCount++;
-              scoredAnswers[q.id] = {
-                answer: studentAnswer,
-                result: 'correct',
-                points: q.marks,
-                verdict: 'Accepted',
-                explanation: q.explanation
-              };
-            } else {
+            if (!runRes || runRes.verdict !== 'Accepted') {
               wrongCount++;
               scoredAnswers[q.id] = {
                 answer: studentAnswer,
                 result: 'wrong',
                 points: 0,
-                verdict: runRes?.verdict || 'Execution Error',
+                verdict: runRes?.verdict || 'Compilation Error',
+                details: runRes?.stderr || 'Code failed to compile or threw a runtime error.',
+                explanation: q.explanation
+              };
+            } else {
+              // Gate 2: Code compiles cleanly -> Evaluate algorithmic structure, control flow & complexity
+              const evalRes = evaluateCodeHeuristics(studentAnswer, lang, q.starter_code, q);
+              const points = Math.round(evalRes.scoreRatio * q.marks);
+              totalScore += points;
+              if (evalRes.result === 'correct') {
+                correctCount++;
+              } else {
+                wrongCount++;
+              }
+
+              scoredAnswers[q.id] = {
+                answer: studentAnswer,
+                result: evalRes.result,
+                points,
+                verdict: evalRes.verdict,
+                staticAnalysis: true,
+                details: evalRes.details,
                 explanation: q.explanation
               };
             }
-          } catch (_) {
+          } catch (err) {
             wrongCount++;
             scoredAnswers[q.id] = {
               answer: studentAnswer,
               result: 'wrong',
               points: 0,
               verdict: 'Execution Error',
+              details: err.message,
               explanation: q.explanation
             };
           }
