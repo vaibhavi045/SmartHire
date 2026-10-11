@@ -554,6 +554,14 @@ router.post('/upload', auth, roles('recruiter'), async (req, res) => {
       correct_index: q.correctAnswer ?? null, // was correct_answer
       marks: q.marks || 4,
       ordering: idx,                     // was order_index
+      description: q.description || '',
+      starter_code: q.starterCode || q.starter_code || null,
+      code_constraints: q.constraints || q.code_constraints || null,
+      examples: q.examples || null,
+      explanation: q.explanation || null,
+      test_cases: q.testCases || q.test_cases || [],
+      sample_input: q.sampleInput || q.sample_input || null,
+      sample_output: q.sampleOutput || q.sample_output || null,
     }));
 
     const { error: qErr } = await supabaseAdmin
