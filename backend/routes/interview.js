@@ -28,6 +28,7 @@ router.post('/save', auth, roles('student'), async (req, res) => {
     transcript,
     expressionLog,
     aiFeedback,
+    track,
   } = req.body;
 
   if (overallScore === undefined || durationSeconds === undefined) {
@@ -47,6 +48,7 @@ router.post('/save', auth, roles('student'), async (req, res) => {
         attention_score: attentionScore || 0,
         stress_score: stressScore || 0,
         ai_feedback: {
+          track: track || 'HR & Behavioral',
           transcript: transcript || [],
           expressionLog: expressionLog || [],
           feedback: aiFeedback || {},
@@ -87,9 +89,8 @@ router.get('/history', auth, roles('student'), async (req, res) => {
       .select(`
         id, duration_seconds, overall_score,
         eye_contact_score, confidence_score,
-        attention_score, stress_score, conducted_at
+        attention_score, stress_score, conducted_at, ai_feedback
       `)
-      // ✅ Removed companies(name, logo_url) - no company_id foreign key
       .eq('student_id', req.user.id)
       .order('conducted_at', { ascending: false });
 
@@ -97,7 +98,8 @@ router.get('/history', auth, roles('student'), async (req, res) => {
 
     const history = (data || []).map(s => ({
       id: s.id,
-      company: 'General', // ✅ Hardcoded since no company relation
+      company: s.ai_feedback?.track || s.ai_feedback?.company || 'General',
+      track: s.ai_feedback?.track || 'General',
       companyLogo: null,
       overallScore: s.overall_score,
       eyeContact: s.eye_contact_score,
@@ -107,6 +109,8 @@ router.get('/history', auth, roles('student'), async (req, res) => {
       duration: formatDuration(s.duration_seconds),
       conductedAt: s.conducted_at,
       grade: getGrade(s.overall_score),
+      transcriptCount: s.ai_feedback?.transcript?.length || 0,
+      transcript: s.ai_feedback?.transcript || [],
     }));
 
     res.json({ history });
