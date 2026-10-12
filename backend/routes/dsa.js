@@ -120,7 +120,7 @@ router.post('/submit', auth, roles('student'), async (req, res) => {
     let overallStatus = 'Accepted';
     const results = [];
 
-    // Run each test case through Judge0
+    // Run each test case through JDoodle
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
       try {

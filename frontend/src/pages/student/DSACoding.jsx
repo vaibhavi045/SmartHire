@@ -7,6 +7,7 @@ import {
   Lightbulb, History, AlertCircle, Trophy, Zap, Lock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { codeAPI } from '../../api/axios';
 
 const C = {
   bg:'var(--bg-base)', card:'var(--bg-card)', cardB:'var(--bg-card-raised)',
@@ -641,25 +642,11 @@ const getCode   = (id, lang) => { try { return localStorage.getItem(`dsa_code_${
 const saveCode  = (id, lang, code) => { try { localStorage.setItem(`dsa_code_${id}_${lang}`, code); } catch {} };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// JUDGE0 execution — calls your self-hosted backend
+// JDOODLE execution — calls backend proxy with JDoodle Cloud integration
 // ═══════════════════════════════════════════════════════════════════════════
-const runViaJudge0 = async (code, language, stdin = '') => {
-  const token = localStorage.getItem('token') || '';
-  const resp  = await Promise.race([
-    fetch('/api/code/run', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ code, language, stdin }),
-    }),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
-  ]);
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || err.fix || `HTTP ${resp.status}`);
-  }
-  const d = await resp.json();
-  if (d.verdict === 'Judge0 Offline') throw new Error('Judge0 not running');
-  return d;
+const runViaJDoodle = async (code, language, stdin = '') => {
+  const resp = await codeAPI.run({ code, language, stdin });
+  return resp.data;
 };
 
 // JS browser fallback
@@ -689,17 +676,19 @@ export default function DSACoding() {
   const [submitOutput,setSubOutput]   = useState(null);
   const [customInput, setCustomInput] = useState('');
   const [solved,      setSolvedState] = useState(getSolved());
-  const [judge0OK,    setJudge0OK]    = useState(null); // null=unchecked, true/false
+  const [engineOK,    setEngineOK]    = useState(null); // null=unchecked, true/false
+  const [engineName,  setEngineName]  = useState('JDoodle Cloud');
   const [submissions, setSubmissions] = useState([]);
   const editorRef = useRef(null);
 
-  // Check Judge0 status on mount
+  // Check JDoodle engine status on mount
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
-    fetch('/api/code/status', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => setJudge0OK(d.available))
-      .catch(() => setJudge0OK(false));
+    codeAPI.getStatus()
+      .then(res => {
+        setEngineOK(Boolean(res.data?.available));
+        if (res.data?.engine) setEngineName(res.data.engine);
+      })
+      .catch(() => setEngineOK(false));
   }, []);
 
   const openProblem = (prob) => {
@@ -744,10 +733,10 @@ export default function DSACoding() {
     setRunning(true); setRunOutput(null);
     try {
       let result;
-      if (lang === 'javascript' && judge0OK === false) {
+      if (lang === 'javascript' && engineOK === false) {
         result = await runJSBrowser(code);
       } else {
-        result = await runViaJudge0(code, lang, customInput);
+        result = await runViaJDoodle(code, lang, customInput);
       }
       setRunOutput({ type:'run', ...result });
     } catch (err) {
@@ -755,8 +744,13 @@ export default function DSACoding() {
         const r = await runJSBrowser(code);
         setRunOutput({ type:'run', ...r });
       } else {
-        setRunOutput({ type:'run', verdict:'Judge0 Offline', stdout:'', stderr:
-          'Judge0 CE is not running.\n\nStart it:\n  cd SmartHire/judge0\n  docker-compose up -d\n\nThen restart backend.' });
+        const msg = err.response?.data?.error || err.message || 'Execution failed';
+        setRunOutput({
+          type:'run',
+          verdict:'JDoodle Offline',
+          stdout:'',
+          stderr: `JDoodle execution failed: ${msg}\nPlease verify backend connectivity and JDoodle credentials.`
+        });
       }
     } finally { setRunning(false); }
   };
@@ -766,12 +760,13 @@ export default function DSACoding() {
     if (!code.trim() || !selected) return;
     setSubmitting(true); setSubOutput(null);
 
-    // For JS use browser execution; others need Judge0
-    const usesBrowser = lang === 'javascript' && judge0OK === false;
+    // For JS browser fallback only if backend engine is unavailable
+    const usesBrowser = lang === 'javascript' && engineOK === false;
 
     try {
       let passed = 0, total = selected.testCases?.length || 0;
-      const results = [];
+      let results = [];
+      let status = 'Wrong Answer';
 
       if (usesBrowser && lang === 'javascript') {
         // Wrap each test case
@@ -784,23 +779,46 @@ export default function DSACoding() {
           if (ok) passed++;
           results.push({ input: tc.input, expected: exp, got, passed: ok, verdict: r.verdict });
         }
+        status = passed === total ? 'Accepted' : 'Wrong Answer';
       } else {
-        // Use Judge0 for each test case
-        for (const tc of (selected.testCases || [])) {
-          try {
-            const r = await runViaJudge0(code, lang, tc.input);
-            const got = (r.stdout || '').trim();
-            const exp = tc.expected.trim();
-            const ok  = got === exp;
-            if (ok) passed++;
-            results.push({ input:tc.input, expected:exp, got, passed:ok, verdict:r.verdict, time:r.time, memory:r.memory });
-          } catch {
-            results.push({ input:tc.input, expected:tc.expected, got:'Error', passed:false, verdict:'Error' });
+        // Run tests via backend JDoodle engine in batch
+        try {
+          const runRes = await codeAPI.runTests({
+            code,
+            language: lang,
+            testCases: selected.testCases || [],
+          });
+          const data = runRes.data;
+          passed = data.passedCount || 0;
+          total = data.totalCount || total;
+          status = data.verdict === 'Accepted' ? 'Accepted' : 'Wrong Answer';
+          results = (data.results || []).map(r => ({
+            input: r.input,
+            expected: r.expected,
+            got: r.got || r.actual || '',
+            passed: r.passed,
+            verdict: r.verdict,
+            time: r.time,
+            memory: r.memory || 'N/A',
+          }));
+        } catch (batchErr) {
+          // Fallback to sequential JDoodle execution
+          for (const tc of (selected.testCases || [])) {
+            try {
+              const r = await runViaJDoodle(code, lang, tc.input);
+              const got = (r.stdout || '').trim();
+              const exp = tc.expected.trim();
+              const ok  = got === exp;
+              if (ok) passed++;
+              results.push({ input:tc.input, expected:exp, got, passed:ok, verdict:r.verdict, time:r.time, memory:r.memory });
+            } catch {
+              results.push({ input:tc.input, expected:tc.expected, got:'Error', passed:false, verdict:'Error' });
+            }
           }
+          status = passed === total ? 'Accepted' : 'Wrong Answer';
         }
       }
 
-      const status = passed === total ? 'Accepted' : 'Wrong Answer';
       const subRecord = {
         id: Date.now(),
         lang, status, passed, total,
@@ -858,13 +876,12 @@ export default function DSACoding() {
             {PROBLEMS.length} problems — Arrays, Strings, Trees, Graphs, DP, and more
           </p>
         </div>
-        {/* Judge0 status badge */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', background: judge0OK===true?'rgba(22,163,74,0.1)':judge0OK===false?'rgba(220,38,38,0.1)':'rgba(100,116,139,0.1)', border:`1px solid ${judge0OK===true?C.green:judge0OK===false?C.red:C.gray}33`, borderRadius:10 }}>
-          <div style={{ width:8, height:8, borderRadius:'50%', background: judge0OK===true?C.green:judge0OK===false?C.red:C.gray, animation: judge0OK===null?'pulse 1.5s ease-in-out infinite':undefined }}/>
-          <span style={{ fontSize:12, fontWeight:600, color: judge0OK===true?C.green:judge0OK===false?C.red:C.light }}>
-            {judge0OK===null ? 'Checking Judge0...' : judge0OK ? 'Judge0 Running ✓' : 'Judge0 Offline'}
+        {/* JDoodle status badge */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', background: engineOK===true?'rgba(22,163,74,0.1)':engineOK===false?'rgba(220,38,38,0.1)':'rgba(100,116,139,0.1)', border:`1px solid ${engineOK===true?C.green:engineOK===false?C.red:C.gray}33`, borderRadius:10 }}>
+          <div style={{ width:8, height:8, borderRadius:'50%', background: engineOK===true?C.green:engineOK===false?C.red:C.gray, animation: engineOK===null?'pulse 1.5s ease-in-out infinite':undefined }}/>
+          <span style={{ fontSize:12, fontWeight:600, color: engineOK===true?C.green:engineOK===false?C.red:C.light }}>
+            {engineOK===null ? 'Checking JDoodle...' : engineOK ? `${engineName} Ready ✓` : 'JDoodle Offline'}
           </span>
-          {judge0OK===false && <a href="https://github.com/judge0/judge0" target="_blank" rel="noreferrer" style={{ fontSize:11, color:C.cyan, textDecoration:'none' }}>setup guide</a>}
         </div>
       </div>
 
@@ -974,8 +991,8 @@ export default function DSACoding() {
         <span style={{ padding:'2px 10px', borderRadius:999, fontSize:11, fontWeight:700, background:`${DC[selected?.difficulty]}18`, color:DC[selected?.difficulty] }}>{selected?.difficulty}</span>
         {isSolved && <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color:C.green, fontWeight:700 }}><CheckCircle size={12}/>Solved</span>}
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ width:7, height:7, borderRadius:'50%', background:judge0OK?C.green:C.red }}/>
-          <span style={{ fontSize:11, color:judge0OK?C.green:C.red }}>{judge0OK?'Judge0 Ready':'Judge0 Offline'}</span>
+          <div style={{ width:7, height:7, borderRadius:'50%', background:engineOK?C.green:C.red }}/>
+          <span style={{ fontSize:11, color:engineOK?C.green:C.red }}>{engineOK?`${engineName} Ready`:'JDoodle Offline'}</span>
         </div>
       </div>
 
@@ -1013,7 +1030,7 @@ export default function DSACoding() {
               <RotateCcw size={12}/> Reset
             </button>
             <span style={{ marginLeft:'auto', fontSize:11, color:C.gray }}>
-              {lang==='javascript'&&!judge0OK ? '⚡ Browser execution' : '🐳 Judge0 CE'}
+              {lang==='javascript'&&!engineOK ? '⚡ Browser execution' : '⚡ JDoodle Cloud Engine'}
             </span>
           </div>
 

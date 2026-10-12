@@ -1,4 +1,4 @@
-// routes/code.js — Code execution proxy to self-hosted Judge0 CE
+// routes/code.js — Code execution proxy via JDoodle API
 const express = require('express');
 const router  = express.Router();
 const auth    = require('../middleware/auth');
@@ -10,7 +10,7 @@ router.get('/status', async (req, res) => {
   res.json({
     available,
     engine: process.env.JDOODLE_CLIENT_ID ? 'JDoodle Cloud API' : 'Native High-Speed Runner',
-    message: '✅ Code execution engine is active and ready',
+    message: '✅ Code execution engine (JDoodle) is active and ready',
   });
 });
 
@@ -28,9 +28,9 @@ router.post('/run', auth, async (req, res) => {
   } catch (err) {
     if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
       return res.status(503).json({
-        error: 'Judge0 CE is not running.',
-        fix:   'Run: cd judge0 && docker-compose up -d',
-        verdict: 'Judge0 Offline',
+        error: 'JDoodle code execution service unavailable.',
+        fix:   'Verify JDoodle credentials in environment variables.',
+        verdict: 'JDoodle Offline',
       });
     }
     res.status(500).json({ error: err.message });
@@ -58,7 +58,7 @@ router.post('/run-tests', auth, async (req, res) => {
   for (let i = 0; i < cases.length; i++) {
     const tc = cases[i];
     const tcInput = tc.input || '';
-    const expected = normalize(tc.expected_output);
+    const expected = normalize(tc.expected_output !== undefined ? tc.expected_output : tc.expected);
 
     try {
       const execRes = await execute(code, language, tcInput);
@@ -93,6 +93,7 @@ router.post('/run-tests', auth, async (req, res) => {
         input: tcInput,
         expected,
         actual,
+        got: actual,
         stderr: execRes.stderr || '',
         time: execRes.time || '0.05s',
       });
@@ -105,6 +106,7 @@ router.post('/run-tests', auth, async (req, res) => {
         input: tcInput,
         expected,
         actual: '',
+        got: 'Error',
         stderr: err.message,
       });
       overallVerdict = 'Execution Error';
@@ -119,7 +121,7 @@ router.post('/run-tests', auth, async (req, res) => {
     allPassed,
     results,
     time: totalTime,
-    engine: 'SmartHire Code Engine',
+    engine: process.env.JDOODLE_CLIENT_ID ? 'JDoodle Cloud' : 'Native High-Speed Runner',
   });
 });
 

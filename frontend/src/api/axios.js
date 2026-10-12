@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
-  timeout: 120000,  // 30s — longer timeout for Judge0 code execution
+  timeout: 120000,  // 120s — longer timeout for JDoodle code execution
   headers: {
     'Content-Type': 'application/json',
   },
@@ -121,6 +121,13 @@ export const dsaAPI = {
   run:           (data)          => api.post('/api/dsa/run', data),
   submit:        (data)          => api.post('/api/dsa/submit', data),
   getPerformance: ()             => api.get('/api/dsa/performance'),
+};
+
+// Code Execution (JDoodle)
+export const codeAPI = {
+  getStatus: () => api.get('/api/code/status'),
+  run:       (data) => api.post('/api/code/run', data),
+  runTests:  (data) => api.post('/api/code/run-tests', data),
 };
 
 // Mock OA
