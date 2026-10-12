@@ -93,6 +93,7 @@ export function AuthProvider({ children }) {
         email: cleanEmail, 
         role, 
         name,
+        profile: data.profile || null,
       };
 
       localStorage.setItem('user', JSON.stringify(userData));

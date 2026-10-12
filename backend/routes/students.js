@@ -38,16 +38,16 @@ router.get('/profile', auth, roles('student'), async (req, res) => {
       if (error.code === 'PGRST116') {
         const { data: newProfile, error: insertErr } = await supabase
           .from('student_profiles')
-          .insert({ id: req.user.id, full_name: req.user.name || '' })
+          .insert({ id: req.user.id, full_name: req.user.name || '', placement_status: 'unplaced' })
           .select()
           .single();
         if (insertErr) return res.status(500).json({ error: insertErr.message });
-        return res.json({ profile: newProfile });
+        return res.json({ profile: { ...newProfile, email: req.user.email } });
       }
       return res.status(404).json({ error: 'Profile not found.' });
     }
 
-    res.json({ profile: data });
+    res.json({ profile: { ...data, email: data.email || req.user.email } });
   } catch (err) {
     console.error('GET /profile error:', err);
     res.status(500).json({ error: 'Failed to fetch profile' });
@@ -64,6 +64,7 @@ router.put('/profile', auth, roles('student'), async (req, res) => {
       full_name, phone, branch, semester, cgpa,
       skills, certifications, linkedin_url, github_url,
       tenth_percent, twelfth_percent, backlogs, placement_status,
+      roll_number,
     } = req.body;
 
     const updatePayload = {
@@ -83,6 +84,10 @@ router.put('/profile', auth, roles('student'), async (req, res) => {
       placement_status: placement_status || 'unplaced',
     };
 
+    if (roll_number !== undefined) {
+      updatePayload.roll_number = roll_number || null;
+    }
+
     // Use upsert so it works even if profile row doesn't exist yet
     const { data, error } = await supabase
       .from('student_profiles')
@@ -95,7 +100,7 @@ router.put('/profile', auth, roles('student'), async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ message: 'Profile updated successfully.', profile: data });
+    res.json({ message: 'Profile updated successfully.', profile: { ...data, email: req.user.email } });
   } catch (err) {
     console.error('PUT /profile error:', err);
     res.status(500).json({ error: 'Failed to update profile' });

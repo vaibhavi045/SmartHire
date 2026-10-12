@@ -94,7 +94,11 @@ export default function Dashboard() {
           <h1 style={s.h1}>
             Good {getGreeting()}, {profile?.full_name?.split(' ')[0] || user?.name || 'there'} 👋
           </h1>
-          <p style={s.sub}>Here's your placement journey at a glance</p>
+          <p style={s.sub}>
+            {profile?.branch
+              ? `${profile.branch} Department${profile?.roll_number ? ` • Roll No: ${profile.roll_number}` : ''}`
+              : "Here's your placement journey at a glance"}
+          </p>
         </div>
         {profile?.cgpa && (
           <div style={s.cgpaChip}>

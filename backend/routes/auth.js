@@ -80,14 +80,15 @@ router.post('/register', registerRules, async (req, res) => {
     await supabase.from('users').insert({ id: userId, email, role, is_active: true, email_verified: false });
 
     if (role === 'student') {
-      const { error: profileErr } = await supabase.from('student_profiles').insert({
+      const { error: profileErr } = await supabase.from('student_profiles').upsert({
         id: userId,
         full_name,
         roll_number: roll_number || null,
         branch: branch || null,
         cgpa: cgpa ? parseFloat(cgpa) : null,
-      });
-      if (profileErr) console.error('student_profiles insert failed:', profileErr.message);
+        placement_status: 'unplaced',
+      }, { onConflict: 'id' });
+      if (profileErr) console.error('student_profiles upsert failed:', profileErr.message);
     } else if (role === 'recruiter') {
       await supabase
         .from('companies')
@@ -176,19 +177,17 @@ router.post('/login', loginRules, async (req, res) => {
       const { data: sp } = await supabase
         .from('student_profiles')
         .select('full_name, roll_number, branch, cgpa, placement_status')
-        .eq('id', finalUser.id)
-        .maybeSingle();
-      profile = sp;
+      profile = sp ? { ...sp, email: finalUser.email } : null;
     }
 
-   // POST /api/auth/login — replace the final res.json
-res.json({ 
-  token, 
-  role:   finalUser.role, 
-  userId: finalUser.id,        // ✅ ADD THIS
-  name:   profile?.full_name || null,  // ✅ ADD THIS
-  profile 
-});
+    res.json({ 
+      token, 
+      role:    finalUser.role, 
+      userId:  finalUser.id,
+      email:   finalUser.email,
+      name:    profile?.full_name || null,
+      profile 
+    });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error during login.' });
