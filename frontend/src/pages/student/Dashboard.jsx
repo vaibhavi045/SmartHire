@@ -7,12 +7,12 @@ import StatCard from '../../components/StatCard';
 import GlowCard from '../../components/GlowCard';
 import {
   AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   Brain, Code2, Video, FileText, Briefcase, ArrowRight,
   Target, Zap, ChevronRight, Building2,
-  CheckCircle2, Award
+  CheckCircle2, ShieldCheck
 } from 'lucide-react';
 import { DEMO_JOBS } from '../../data/demoJobs';
 
@@ -52,12 +52,13 @@ export default function Dashboard() {
       dsaAPI.getPerformance().catch(() => ({ data: {} })),
       applicationsAPI.getMyApps().catch(() => ({ data: { applications: [] } })),
     ]).then(([p, a, d, ap]) => {
-      setProfile(p.data?.profile || {
-        full_name: 'Vaibhavi Sawant',
-        branch: 'IT',
-        roll_number: '21IT104',
-        cgpa: 9.0,
-        backlogs: 0
+      const userProfile = p.data?.profile || p.data || {};
+      setProfile({
+        full_name:   userProfile.full_name || user?.name || 'Vaibhavi Sawant',
+        branch:      userProfile.branch || 'IT',
+        roll_number: userProfile.roll_number || '21IT104',
+        cgpa:        userProfile.cgpa || 9.0,
+        backlogs:    userProfile.backlogs ?? 0
       });
       setAptStats(a.data);
       setDsaStats(d.data);
@@ -65,6 +66,7 @@ export default function Dashboard() {
       const apiApps = Array.isArray(ap.data) ? ap.data : (ap.data?.applications || []);
       const existingJobIds = new Set(apiApps.map(app => app.job_id || app.job_postings?.id));
 
+      // Synthesize applied demo jobs (like Deloitte)
       const localApps = storedAppliedIds
         .filter(id => !existingJobIds.has(id))
         .map(id => {
@@ -81,28 +83,35 @@ export default function Dashboard() {
         })
         .filter(Boolean);
 
-      setApps([...localApps, ...apiApps]);
+      const combinedApps = [...localApps, ...apiApps];
+
+      // If user hasn't applied to anything yet, provide a ready default Deloitte application showcase
+      if (combinedApps.length === 0) {
+        combinedApps.push({
+          id: 'app_deloitte_default',
+          job_id: DEMO_JOBS[0].id,
+          status: 'applied',
+          stage: 'applied',
+          applied_at: new Date().toISOString(),
+          job_postings: DEMO_JOBS[0] // Deloitte
+        });
+      }
+
+      setApps(combinedApps);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [user]);
 
   // Performance trend data
   const perfTrend = aptStats?.trend || [
-    { week: 'W1', score: 42 }, { week: 'W2', score: 58 }, { week: 'W3', score: 61 },
-    { week: 'W4', score: 55 }, { week: 'W5', score: 74 }, { week: 'W6', score: 80 },
+    { week: 'W1', score: 45 }, { week: 'W2', score: 58 }, { week: 'W3', score: 62 },
+    { week: 'W4', score: 55 }, { week: 'W5', score: 76 }, { week: 'W6', score: 82 },
   ];
 
   // Skill radar data
   const radarData = aptStats?.topicData || [
-    { subject: 'Quant',   score: 72 }, { subject: 'Logical', score: 85 },
-    { subject: 'Verbal',  score: 60 }, { subject: 'DI',      score: 50 },
+    { subject: 'Quant',   score: 75 }, { subject: 'Logical', score: 85 },
+    { subject: 'Verbal',  score: 65 }, { subject: 'DI',      score: 55 },
     { subject: 'Puzzles', score: 78 },
-  ];
-
-  // DSA Topic bar data
-  const dsaBar = dsaStats?.topicStats?.slice(0, 6) || [
-    { topic: 'Arrays',   accuracy: 88 }, { topic: 'Trees',    accuracy: 65 },
-    { topic: 'DP',       accuracy: 50 }, { topic: 'Graphs',   accuracy: 42 },
-    { topic: 'Strings',  accuracy: 78 }, { topic: 'Greedy',   accuracy: 60 },
   ];
 
   const quickLinks = [
@@ -114,14 +123,15 @@ export default function Dashboard() {
     { label: 'Resume Builder', icon: FileText,  to: '/student/resume',     color: '#dc2626' },
   ];
 
-  const appliedCount = apps.length;
+  // Guaranteed preparation metrics (matches script: "provides preparation metrics")
   const testsTakenCount = aptStats?.totalAttempts || 6;
   const aptScoreValue   = aptStats?.avgScore ? `${aptStats.avgScore}%` : '82%';
   const dsaSolvedCount  = dsaStats?.uniqueProblemsSolved || 18;
+  const appliedCount    = apps.length;
 
   return (
     <div style={s.page}>
-      {/* ── Header with Verified Credentials ── */}
+      {/* ── 1. Header with Verified Academic Credentials ── */}
       <div style={s.header}>
         <div>
           <h1 style={s.h1}>
@@ -157,7 +167,7 @@ export default function Dashboard() {
               fontWeight: 700,
               border: '1px solid rgba(79,70,229,0.2)'
             }}>
-              <Award size={12}/> Tier-1 Eligible
+              <ShieldCheck size={12}/> Tier-1 Eligible
             </span>
           </div>
         </div>
@@ -176,7 +186,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Stats Row ── */}
+      {/* ── 2. Preparation Metrics (4 KPI Cards) ── */}
       <div style={s.statsGrid}>
         <StatCard 
           title="Tests Taken"       
@@ -194,7 +204,7 @@ export default function Dashboard() {
           iconColor={VIOLET} 
           accent={VIOLET} 
           loading={loading} 
-          subtitle="Top 10% in IT Dept" 
+          subtitle="Average across all tests" 
         />
         <StatCard 
           title="DSA Solved"        
@@ -206,57 +216,27 @@ export default function Dashboard() {
           subtitle="Arrays, Trees & DP"
         />
         <StatCard 
-          title="Jobs Applied"      
+          title="Active Applications"      
           value={appliedCount}                    
           icon={<Briefcase size={18}/>} 
           iconColor={AMBER}  
           accent={AMBER}  
           loading={loading} 
-          subtitle={appliedCount > 0 ? `${appliedCount} active in pipeline` : '0 offer(s) received'} 
+          subtitle="Live in recruitment pipeline" 
         />
       </div>
 
-      {/* ── Charts Row (Score Trend + Skill Radar) ── */}
-      <div style={s.chartsRow}>
-        <GlowCard title="Score Trend" subtitle="Aptitude performance over time" accent={CYAN} style={{ flex: 2 }}>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={perfTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <defs>
-                <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={CYAN}   stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={CYAN}   stopOpacity={0}    />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="week" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-              <Tooltip content={<CustomTip />} />
-              <Area type="monotone" dataKey="score" name="Score" stroke={CYAN} strokeWidth={2.5} fill="url(#cg)" dot={{ fill: CYAN, r: 3 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </GlowCard>
-
-        <GlowCard title="Skill Radar" subtitle="Aptitude topic coverage" accent={VIOLET} style={{ flex: 1 }}>
-          <ResponsiveContainer width="100%" height={180}>
-            <RadarChart data={radarData} margin={{ top: 0, right: 20, bottom: 0, left: 20 }}>
-              <PolarGrid stroke="rgba(15,23,42,0.10)" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10 }} />
-              <Radar dataKey="score" stroke={VIOLET} fill={VIOLET} fillOpacity={0.2} strokeWidth={2} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </GlowCard>
-      </div>
-
-      {/* ── Upcoming Campus Drives & Quick Access ── */}
+      {/* ── 3. The Core Split: Upcoming Drives & Active Applications ── */}
       <div style={s.chartsRow}>
         {/* Upcoming Drives Card */}
         <GlowCard 
           title="Upcoming Campus Drives" 
           subtitle="Verified placement drives currently accepting applications" 
           accent="#3b82f6" 
-          style={{ flex: 2 }}
+          style={{ flex: 1.15 }}
           headerRight={
             <button style={s.viewAll} onClick={() => navigate('/student/jobs')}>
-              View All Openings ({DEMO_JOBS.length}) <ArrowRight size={13} />
+              View All Drives ({DEMO_JOBS.length}) <ArrowRight size={13} />
             </button>
           }
         >
@@ -273,8 +253,8 @@ export default function Dashboard() {
                     justifyContent: 'space-between',
                     gap: 12, 
                     padding: '12px 14px', 
-                    background: isDeloitte ? 'rgba(59,130,246,0.04)' : 'var(--bg-input)', 
-                    border: `1px solid ${isDeloitte ? 'rgba(59,130,246,0.22)' : 'var(--border)'}`, 
+                    background: isDeloitte ? 'rgba(59,130,246,0.05)' : 'var(--bg-input)', 
+                    border: `1px solid ${isDeloitte ? 'rgba(59,130,246,0.25)' : 'var(--border)'}`, 
                     borderRadius: 10
                   }}
                 >
@@ -323,7 +303,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: GREEN, fontFamily: "'Sora',sans-serif" }}>
                         {job.package_lpa} LPA
@@ -351,94 +331,106 @@ export default function Dashboard() {
           </div>
         </GlowCard>
 
-        {/* Quick links */}
-        <GlowCard title="Quick Access" subtitle="Instant practice launchpad" accent={AMBER} style={{ flex: 1 }}>
+        {/* Active Applications Card */}
+        <GlowCard 
+          title="Active Applications" 
+          subtitle="Real-time recruitment pipeline status" 
+          accent={AMBER} 
+          style={{ flex: 0.85 }}
+          headerRight={
+            <button style={s.viewAll} onClick={() => navigate('/student/applications')}>
+              Pipeline Tracker <ArrowRight size={13} />
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {apps.slice(0, 2).map(app => {
+              const job = app.job_postings || {};
+              const company = job.companies || {};
+              return (
+                <div key={app.id} style={{ padding: '12px 14px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {company.name || 'Deloitte'}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {job.title || 'Associate Solution Advisor'}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: GREEN, fontFamily: "'Sora',sans-serif" }}>
+                      {job.package_lpa || '7.6'} LPA
+                    </span>
+                  </div>
+
+                  {/* Stage pill & drive countdown */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(22,163,74,0.1)', color: GREEN, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                      <CheckCircle2 size={11} /> Stage: Applied
+                    </span>
+                    <button 
+                      onClick={() => navigate('/student/applications')}
+                      style={{ background: 'none', border: 'none', color: CYAN, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}
+                    >
+                      Track Stages <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ marginTop: 4, padding: '10px 12px', background: 'rgba(79,70,229,0.04)', borderRadius: 8, border: '1px dashed rgba(79,70,229,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Next Assessment: <strong>Deloitte OA</strong></span>
+              <span style={{ fontSize: 11, color: CYAN, fontWeight: 700 }}>Scheduled Soon</span>
+            </div>
+          </div>
+        </GlowCard>
+      </div>
+
+      {/* ── 4. Analytics Row: Score Trend + Skill Radar + Quick Access ── */}
+      <div style={s.chartsRow}>
+        <GlowCard title="Score Trend" subtitle="Aptitude performance over time" accent={CYAN} style={{ flex: 1.2 }}>
+          <ResponsiveContainer width="100%" height={170}>
+            <AreaChart data={perfTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+              <defs>
+                <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={CYAN}   stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={CYAN}   stopOpacity={0}    />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="week" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+              <Tooltip content={<CustomTip />} />
+              <Area type="monotone" dataKey="score" name="Score" stroke={CYAN} strokeWidth={2.5} fill="url(#cg)" dot={{ fill: CYAN, r: 3 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </GlowCard>
+
+        <GlowCard title="Skill Radar" subtitle="Aptitude topic coverage" accent={VIOLET} style={{ flex: 0.9 }}>
+          <ResponsiveContainer width="100%" height={170}>
+            <RadarChart data={radarData} margin={{ top: 0, right: 16, bottom: 0, left: 16 }}>
+              <PolarGrid stroke="rgba(15,23,42,0.10)" />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10 }} />
+              <Radar dataKey="score" stroke={VIOLET} fill={VIOLET} fillOpacity={0.2} strokeWidth={2} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </GlowCard>
+
+        <GlowCard title="Quick Access" subtitle="Practice launchpad" accent={AMBER} style={{ flex: 0.9 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {quickLinks.map(link => {
+            {quickLinks.slice(0, 4).map(link => {
               const Icon = link.icon;
               return (
                 <button key={link.to} style={s.quickLink(link.color)} onClick={() => navigate(link.to)}>
-                  <div style={s.quickIcon(link.color)}><Icon size={15} color={link.color} /></div>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' }}>{link.label}</span>
-                  <ChevronRight size={14} color="var(--text-muted)" />
+                  <div style={s.quickIcon(link.color)}><Icon size={14} color={link.color} /></div>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' }}>{link.label}</span>
+                  <ChevronRight size={13} color="var(--text-muted)" />
                 </button>
               );
             })}
           </div>
         </GlowCard>
       </div>
-
-      {/* ── DSA Bar + Active Applications ── */}
-      <div style={s.chartsRow}>
-        <GlowCard title="DSA Topic Accuracy" subtitle="% solved correctly per topic" accent={GREEN} style={{ flex: 1 }}>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={dsaBar} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <XAxis dataKey="topic" tick={{ fill: '#475569', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#475569', fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-              <Tooltip content={<CustomTip />} />
-              <Bar dataKey="accuracy" name="Accuracy %" fill={GREEN} radius={[4, 4, 0, 0]} maxBarSize={36} />
-            </BarChart>
-          </ResponsiveContainer>
-        </GlowCard>
-
-        {/* Active Applications Card */}
-        <GlowCard
-          title="Active Applications"
-          subtitle="Real-time recruitment pipeline tracking"
-          accent={CYAN}
-          style={{ flex: 1 }}
-          headerRight={
-            <button style={s.viewAll} onClick={() => navigate('/student/applications')}>
-              Tracker <ArrowRight size={12} />
-            </button>
-          }
-        >
-          {apps.length === 0 ? (
-            <div style={{ padding: '20px 14px', textAlign: 'center', background: 'var(--bg-input)', borderRadius: 10, border: '1px dashed var(--border)' }}>
-              <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>No active applications</p>
-              <p style={{ margin: '0 0 10px', fontSize: 11, color: '#64748b' }}>Apply to featured campus drives like Deloitte (7.6 LPA) to track progress.</p>
-              <button onClick={() => navigate('/student/jobs')} style={{ padding: '5px 14px', background: CYAN, color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Browse Jobs</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {apps.slice(0, 3).map(a => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-input)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {a.job_postings?.companies?.name || 'Deloitte'}
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
-                      {a.job_postings?.title || 'Associate Solution Advisor'}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={s.badge(a.stage || a.status || 'applied')}>
-                      {a.stage ? a.stage.replace('_', ' ') : 'Applied'}
-                    </span>
-                    <button onClick={() => navigate('/student/applications')} style={{ background: 'none', border: 'none', color: CYAN, cursor: 'pointer', padding: 0 }}>
-                      <ChevronRight size={14}/>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </GlowCard>
-      </div>
-
-      {/* ── Placement Tip Banner ── */}
-      <GlowCard accent="#4f46e5" style={{ background: 'linear-gradient(135deg, #eef2ff, #f5f3ff)', border: '1px solid rgba(79,70,229,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ fontSize: 32 }}>💡</div>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Placement Readiness Tip</p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
-              Companies like Deloitte and TCS focus heavily on Quantitative Aptitude, Logical Reasoning, and Data Structures. Consistent daily practice boosts shortlisting probability by 40%.
-            </p>
-          </div>
-          <button style={s.tipBtn} onClick={() => navigate('/student/aptitude')}>Practice Aptitude</button>
-        </div>
-      </GlowCard>
     </div>
   );
 }
@@ -450,21 +442,14 @@ function getGreeting() {
   return 'evening';
 }
 
-const STATUS_COLORS = { applied: '#4f46e5', shortlisted: '#d97706', selected: '#16a34a', rejected: '#dc2626' };
-
 const s = {
-  page:       { padding: 28, maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 },
+  page:       { padding: 24, maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 },
   header:     { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
   h1:         { margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', fontFamily: "'Sora',sans-serif" },
-  sub:        { margin: '6px 0 0', fontSize: 13, color: '#475569' },
   cgpaChip:   { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)', borderRadius: 12, padding: '10px 18px', flexShrink: 0 },
-  statsGrid:  { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 },
-  chartsRow:  { display: 'flex', gap: 16, flexWrap: 'wrap' },
-  quickLink:  (c) => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: `${c}0a`, border: `1px solid ${c}18`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s', width: '100%' }),
-  quickIcon:  (c) => ({ width: 30, height: 30, borderRadius: 8, background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+  statsGrid:  { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 },
+  chartsRow:  { display: 'flex', gap: 14, flexWrap: 'wrap' },
+  quickLink:  (c) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', background: `${c}0a`, border: `1px solid ${c}18`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s', width: '100%' }),
+  quickIcon:  (c) => ({ width: 26, height: 26, borderRadius: 6, background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
   viewAll:    { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#4f46e5', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Sora',sans-serif", fontWeight: 600 },
-  th:         { padding: '8px 12px', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid var(--border)', textAlign: 'left' },
-  td:         { padding: '10px 12px', fontSize: 13, color: '#94a3b8', borderBottom: '1px solid var(--border)' },
-  badge:      (st) => ({ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${STATUS_COLORS[st] || '#4f46e5'}18`, color: STATUS_COLORS[st] || '#4f46e5', textTransform: 'capitalize', border: `1px solid ${STATUS_COLORS[st] || '#4f46e5'}33` }),
-  tipBtn:     { flexShrink: 0, padding: '8px 16px', background: 'var(--cyan-dim)', border: '1px solid var(--cyan-border)', borderRadius: 8, color: '#4f46e5', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'Sora',sans-serif", whiteSpace: 'nowrap' },
 };
