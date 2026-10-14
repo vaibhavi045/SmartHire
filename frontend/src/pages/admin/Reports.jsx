@@ -112,6 +112,12 @@ const s = {
 const DEMO = {
   totalStudents:450, placed:312, placementRate:69, avgPackage:8.4, highestPackage:45,
   byBranch:[{branch:'CST',placed:95,unplaced:25},{branch:'IT',placed:72,unplaced:18},{branch:'ENC',placed:58,unplaced:32},{branch:'AI',placed:42,unplaced:28},{branch:'DS',placed:28,unplaced:40},{branch:'CE',placed:17,unplaced:35}],
-  yearTrend:[{year:'2021',rate:54},{year:'2022',rate:61},{year:'2023',rate:65},{year:'2024',rate:69}],
-  topCompanies:[{name:'TCS',hired:45,packageRange:'7–9 LPA',driveDate:'Dec 15'},{name:'Infosys',hired:38,packageRange:'5–7 LPA',driveDate:'Dec 18'},{name:'Wipro',hired:29,packageRange:'8–10 LPA',driveDate:'Dec 28'},{name:'Amazon',hired:12,packageRange:'20–28 LPA',driveDate:'Jan 5'},{name:'Accenture',hired:22,packageRange:'6–8 LPA',driveDate:'Jan 10'}],
+  yearTrend:[{year:'2023',rate:58},{year:'2024',rate:63},{year:'2025',rate:66},{year:'2026',rate:69}],
+  topCompanies:[
+    {name:'TCS Digital',hired:42,packageRange:'7.0–9.0 LPA',driveDate:'Oct 10, 2026'},
+    {name:'Infosys (Power Programmer)',hired:26,packageRange:'9.5–12.0 LPA',driveDate:'Oct 04, 2026'},
+    {name:'Deloitte',hired:18,packageRange:'7.6–9.0 LPA',driveDate:'Oct 14, 2026'},
+    {name:'Capgemini',hired:16,packageRange:'7.5–8.5 LPA',driveDate:'Upcoming'},
+    {name:'L&T Technology Services',hired:14,packageRange:'6.5–7.5 LPA',driveDate:'Upcoming'},
+  ],
 };
