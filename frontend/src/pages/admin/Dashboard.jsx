@@ -800,11 +800,11 @@ export default function AdminDashboard() {
         if (d && d.overview) {
           setStats({
             totalStudents: d.overview.totalStudents > 10 ? d.overview.totalStudents : DEMO_STATS.totalStudents,
-            placed: d.overview.placedStudents > 10 ? d.overview.placedStudents : DEMO_STATS.placed,
-            placementRate: d.overview.placementRate > 10 ? d.overview.placementRate : DEMO_STATS.placementRate,
+            placed: d.overview.placedStudents > 0 ? d.overview.placedStudents : DEMO_STATS.placed,
+            placementRate: d.overview.placementRate > 0 ? d.overview.placementRate : DEMO_STATS.placementRate,
             companies: (d.topCompanies?.length ? d.topCompanies.length + 33 : DEMO_STATS.companies),
             activeDrives: d.overview.activeJobs || DEMO_STATS.activeDrives,
-            byBranch: (d.branchWise && d.branchWise.length > 2) ? d.branchWise.map(b => ({
+            byBranch: (d.branchWise && d.branchWise.length > 2 && d.branchWise.some(b => b.placed > 0)) ? d.branchWise.map(b => ({
               branch: b.branch,
               placed: b.placed,
               unplaced: b.total - b.placed

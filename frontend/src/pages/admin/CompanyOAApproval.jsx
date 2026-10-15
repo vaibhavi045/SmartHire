@@ -124,12 +124,23 @@ export default function CompanyOAApprovals() {
             Review OA tests submitted by companies before they go live for students.
           </p>
         </div>
-        <button onClick={load} style={{ display:'flex', alignItems:'center', gap:6,
-          padding:'8px 14px', background:isDark?'var(--bg-card-high)':'#f1f5f9',
-          border:`1px solid ${bord}`, borderRadius:8, fontSize:12, fontWeight:600,
-          color:txt2, cursor:'pointer' }}>
-          <RefreshCw size={13}/> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => { setTests(tab === 'pending' ? DEMO_PENDING_OA : DEMO_ALL_OA); toast.success('Demo OA tests queue loaded!'); }} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', background: 'rgba(79,70,229,0.12)',
+            border: `1px solid rgba(79,70,229,0.28)`,
+            borderRadius: 8, fontSize: 12, fontWeight: 700,
+            color: '#4f46e5', cursor: 'pointer', fontFamily: "'Sora',sans-serif"
+          }}>
+            <RefreshCw size={13}/> Reset Demo Queue
+          </button>
+          <button onClick={load} style={{ display:'flex', alignItems:'center', gap:6,
+            padding:'8px 14px', background:isDark?'var(--bg-card-high)':'#f1f5f9',
+            border:`1px solid ${bord}`, borderRadius:8, fontSize:12, fontWeight:600,
+            color:txt2, cursor:'pointer' }}>
+            <RefreshCw size={13}/> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Info banner */}

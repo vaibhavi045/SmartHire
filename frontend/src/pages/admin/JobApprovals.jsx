@@ -99,15 +99,26 @@ export default function JobApprovals() {
             Review and approve job postings from recruiters before they go live to students.
           </p>
         </div>
-        <button onClick={load} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '8px 14px', background: isDark ? 'var(--bg-card-high)' : '#f1f5f9',
-          border: `1px solid ${isDark ? 'var(--border)' : 'rgba(0,0,0,0.1)'}`,
-          borderRadius: 8, fontSize: 12, fontWeight: 600,
-          color: isDark ? '#94a3b8' : '#64748b', cursor: 'pointer',
-        }}>
-          <RefreshCw size={13}/> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => { setJobs(DEMO_PENDING_JOBS); toast.success('Demo job approvals queue loaded!'); }} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', background: 'rgba(79,70,229,0.12)',
+            border: `1px solid rgba(79,70,229,0.28)`,
+            borderRadius: 8, fontSize: 12, fontWeight: 700,
+            color: '#4f46e5', cursor: 'pointer', fontFamily: "'Sora',sans-serif"
+          }}>
+            <RefreshCw size={13}/> Reset Demo Queue
+          </button>
+          <button onClick={load} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', background: isDark ? 'var(--bg-card-high)' : '#f1f5f9',
+            border: `1px solid ${isDark ? 'var(--border)' : 'rgba(0,0,0,0.1)'}`,
+            borderRadius: 8, fontSize: 12, fontWeight: 600,
+            color: isDark ? '#94a3b8' : '#64748b', cursor: 'pointer',
+          }}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Info banner */}

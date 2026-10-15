@@ -24,7 +24,31 @@ export default function AdminCompanies() {
 
   useEffect(() => {
     adminAPI.getCompanies()
-      .then(r => setCompanies(r.data?.companies?.length ? r.data.companies : DEMO_COMPANIES))
+      .then(r => {
+        const fetched = r.data?.companies || [];
+        if (fetched.length > 0) {
+          const enriched = DEMO_COMPANIES.map(dc => {
+            const match = fetched.find(f => f.name.toLowerCase() === dc.name.toLowerCase());
+            return match ? { ...dc, ...match, industry: dc.industry, total_drives: dc.total_drives, total_hired: dc.total_hired, avg_package: dc.avg_package, last_drive: dc.last_drive } : dc;
+          });
+          fetched.forEach(f => {
+            if (!enriched.some(e => e.name.toLowerCase() === f.name.toLowerCase())) {
+              enriched.push({
+                ...f,
+                industry: 'Tech & Services',
+                total_drives: f.totalJobs || 1,
+                total_hired: 8,
+                avg_package: 6.5,
+                status: 'active',
+                last_drive: 'Recent'
+              });
+            }
+          });
+          setCompanies(enriched);
+        } else {
+          setCompanies(DEMO_COMPANIES);
+        }
+      })
       .catch(() => setCompanies(DEMO_COMPANIES))
       .finally(() => setLoading(false));
   }, []);
